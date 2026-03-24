@@ -372,6 +372,7 @@ func runGateway() {
 	}
 	if pgStores != nil && pgStores.Teams != nil {
 		server.SetTeamAttachmentsHandler(httpapi.NewTeamAttachmentsHandler(pgStores.Teams, workspace))
+		server.SetWorkspaceUploadHandler(httpapi.NewWorkspaceUploadHandler(pgStores.Teams, workspace, msgBus))
 	}
 	if builtinToolsH != nil {
 		server.SetBuiltinToolsHandler(builtinToolsH)
@@ -522,7 +523,7 @@ func runGateway() {
 		instanceLoader.RegisterFactory(channels.TypeZaloPersonal, zalopersonal.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeWhatsApp, whatsapp.Factory)
 		instanceLoader.RegisterFactory(channels.TypeSlack, slackchannel.FactoryWithPendingStore(pgStores.PendingMessages))
-		if err := instanceLoader.LoadAll(store.WithCrossTenant(context.Background())); err != nil {
+		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)
 		}
 	}
@@ -684,7 +685,7 @@ func runGateway() {
 			if err != nil {
 				return
 			}
-			team, err := notifyTeamStore.GetTeam(store.WithCrossTenant(context.Background()), teamUUID)
+			team, err := notifyTeamStore.GetTeamUnscoped(context.Background(), teamUUID)
 			if err != nil || team == nil {
 				return
 			}
@@ -726,7 +727,7 @@ func runGateway() {
 			// Resolve lead agent key (needed for leader mode routing + completed-by-leader skip).
 			var leadAgentKey string
 			if notifyAgentStore != nil {
-				if la, err := notifyAgentStore.GetByID(store.WithCrossTenant(context.Background()), team.LeadAgentID); err == nil {
+				if la, err := notifyAgentStore.GetByIDUnscoped(context.Background(), team.LeadAgentID); err == nil {
 					leadAgentKey = la.AgentKey
 				}
 			}
