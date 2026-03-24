@@ -14,6 +14,10 @@ interface KeyValueEditorProps {
   keyPlaceholder?: string;
   valuePlaceholder?: string;
   addLabel?: string;
+  /** When set with `existingKeys`, value inputs for those keys use this placeholder instead of `valuePlaceholder`. */
+  valuePlaceholderExisting?: string;
+  /** Keys (trimmed) treated as already stored — e.g. `env_keys` when editing a credential. */
+  existingKeys?: ReadonlySet<string> | readonly string[];
   /** Return true for keys whose values should be masked (type="password"). */
   maskValue?: (key: string) => boolean;
 }
@@ -33,14 +37,23 @@ function toObject(entries: KeyValuePair[]): Record<string, string> {
   return result;
 }
 
+function toExistingKeySet(keys: ReadonlySet<string> | readonly string[] | undefined): Set<string> | undefined {
+  if (!keys) return undefined;
+  if (keys instanceof Set) return keys;
+  return new Set(keys);
+}
+
 export function KeyValueEditor({
   value,
   onChange,
   keyPlaceholder = "Key",
   valuePlaceholder = "Value",
   addLabel = "Add",
+  valuePlaceholderExisting,
+  existingKeys,
   maskValue,
 }: KeyValueEditorProps) {
+  const existingKeySet = toExistingKeySet(existingKeys);
   const [entries, setEntries] = useState<KeyValuePair[]>(() => toEntries(value));
   const internalChange = useRef(false);
 
@@ -75,6 +88,14 @@ export function KeyValueEditor({
     emitChange(result);
   };
 
+  const valuePhForEntry = (entryKey: string) => {
+    const k = entryKey.trim();
+    if (valuePlaceholderExisting && existingKeySet && k && existingKeySet.has(k)) {
+      return valuePlaceholderExisting;
+    }
+    return valuePlaceholder;
+  };
+
   return (
     <div className="space-y-2">
       {entries.map((entry, idx) => (
@@ -83,14 +104,14 @@ export function KeyValueEditor({
             value={entry.key}
             onChange={(e) => updateEntry(idx, { key: e.target.value })}
             placeholder={keyPlaceholder}
-            className="flex-1 font-mono text-sm"
+            className="flex-1 font-mono text-base md:text-sm"
           />
           <Input
             type={maskValue?.(entry.key) ? "password" : "text"}
             value={entry.value}
             onChange={(e) => updateEntry(idx, { value: e.target.value })}
-            placeholder={valuePlaceholder}
-            className="flex-1 font-mono text-sm"
+            placeholder={valuePhForEntry(entry.key)}
+            className="flex-1 font-mono text-base md:text-sm"
           />
           <Button
             variant="ghost"

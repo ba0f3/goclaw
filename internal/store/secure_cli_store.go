@@ -22,6 +22,8 @@ type SecureCLIBinary struct {
 	AgentID        *uuid.UUID      `json:"agent_id,omitempty"`
 	Enabled        bool            `json:"enabled"`
 	CreatedBy      string          `json:"created_by"`
+	// EnvKeys lists env var names present in encrypted storage (no values). Populated only for API responses.
+	EnvKeys []string `json:"env_keys,omitempty"`
 }
 
 // SecureCLIStore manages secure CLI binary credential configurations.

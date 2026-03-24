@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -43,6 +44,28 @@ func (h *SecureCLIHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, next)
 }
 
+// secureCLIAttachEnvKeysForAPI sets env_keys from decrypted env JSON and clears EncryptedEnv for JSON responses.
+func secureCLIAttachEnvKeysForAPI(b *store.SecureCLIBinary) {
+	if len(b.EncryptedEnv) == 0 {
+		b.EnvKeys = nil
+		b.EncryptedEnv = nil
+		return
+	}
+	var m map[string]string
+	if err := json.Unmarshal(b.EncryptedEnv, &m); err != nil {
+		b.EnvKeys = nil
+		b.EncryptedEnv = nil
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	b.EnvKeys = keys
+	b.EncryptedEnv = nil
+}
+
 func (h *SecureCLIHandler) emitCacheInvalidate(key string) {
 	if h.msgBus == nil {
 		return
@@ -61,9 +84,8 @@ func (h *SecureCLIHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "CLI credentials")})
 		return
 	}
-	// Mask encrypted env — never send raw credentials to UI
 	for i := range result {
-		result[i].EncryptedEnv = nil
+		secureCLIAttachEnvKeysForAPI(&result[i])
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": result})
 }
@@ -178,7 +200,7 @@ func (h *SecureCLIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b.EncryptedEnv = nil // don't expose credentials
+	secureCLIAttachEnvKeysForAPI(b)
 	writeJSON(w, http.StatusOK, b)
 }
 
@@ -199,7 +221,7 @@ func (h *SecureCLIHandler) handleUpdate(w http.ResponseWriter, r *http.Request) 
 	// Allowlist of updatable fields to prevent column injection
 	allowed := map[string]bool{
 		"binary_name": true, "binary_path": true, "description": true,
-		"env": true, "deny_args": true, "deny_verbose": true,
+		"env": true, "env_remove": true, "deny_args": true, "deny_verbose": true,
 		"timeout_seconds": true, "tips": true, "agent_id": true, "enabled": true,
 	}
 	for k := range updates {
@@ -208,13 +230,57 @@ func (h *SecureCLIHandler) handleUpdate(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// If env is updated, serialize as JSON string for the store encrypt path
-	if envVal, ok := updates["env"]; ok {
-		if envMap, isMap := envVal.(map[string]any); isMap {
-			envJSON, _ := json.Marshal(envMap)
-			updates["encrypted_env"] = string(envJSON)
-			delete(updates, "env")
+	// If env is updated: merge non-empty env values; env_remove deletes keys first (so a key can be re-added in the same request).
+	_, hasEnv := updates["env"]
+	_, hasRemove := updates["env_remove"]
+	if hasEnv || hasRemove {
+		existing, err := h.store.Get(r.Context(), id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "credential", id.String())})
+			return
 		}
+		merged := make(map[string]string)
+		if len(existing.EncryptedEnv) > 0 {
+			_ = json.Unmarshal(existing.EncryptedEnv, &merged)
+		}
+		if raw, ok := updates["env_remove"]; ok {
+			if arr, ok := raw.([]any); ok {
+				for _, x := range arr {
+					if s, ok := x.(string); ok {
+						s = strings.TrimSpace(s)
+						if s != "" {
+							delete(merged, s)
+						}
+					}
+				}
+			}
+		}
+		if envVal, ok := updates["env"]; ok {
+			if envMap, isMap := envVal.(map[string]any); isMap {
+				for k, v := range envMap {
+					key := strings.TrimSpace(k)
+					if key == "" {
+						continue
+					}
+					str, ok := v.(string)
+					if !ok {
+						continue
+					}
+					str = strings.TrimSpace(str)
+					if str != "" {
+						merged[key] = str
+					}
+				}
+			}
+		}
+		envJSON, err := json.Marshal(merged)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid env"})
+			return
+		}
+		updates["encrypted_env"] = string(envJSON)
+		delete(updates, "env")
+		delete(updates, "env_remove")
 	}
 
 	if err := h.store.Update(r.Context(), id, updates); err != nil {

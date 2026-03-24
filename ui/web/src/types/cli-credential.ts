@@ -12,6 +12,8 @@ export interface SecureCLIBinary {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /** Names of env vars in encrypted storage (values are never returned). */
+  env_keys?: string[];
 }
 
 export interface CLIPresetEnvVar {
@@ -43,4 +45,6 @@ export interface CLICredentialInput {
   agent_id?: string;
   enabled?: boolean;
   env?: Record<string, string>;
+  /** Keys to remove from stored env (edit only). Processed before env merge on the server. */
+  env_remove?: string[];
 }

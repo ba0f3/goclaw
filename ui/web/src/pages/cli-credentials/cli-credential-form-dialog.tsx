@@ -11,7 +11,12 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { KeyValueEditor } from "@/components/shared/key-value-editor";
 import type { SecureCLIBinary, CLICredentialInput, CLIPreset } from "./hooks/use-cli-credentials";
+
+/** Env var keys whose values should be masked (type="password"). */
+const SENSITIVE_ENV_RE = /^.*(key|secret|token|password|credential).*$/i;
+const isSensitiveEnvKey = (key: string) => SENSITIVE_ENV_RE.test(key.trim());
 
 interface Props {
   open: boolean;
@@ -22,6 +27,17 @@ interface Props {
 }
 
 const NONE_PRESET = "__none__";
+
+function nonEmptyEnvPayload(envValues: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(envValues)) {
+    const kt = k.trim();
+    if (!kt) continue;
+    const vt = v.trim();
+    if (vt) out[kt] = vt;
+  }
+  return out;
+}
 
 export function CliCredentialFormDialog({ open, onOpenChange, credential, presets, onSubmit }: Props) {
   const { t } = useTranslation("cli-credentials");
@@ -50,6 +66,8 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   // Current preset definition (for env var fields)
   const activePreset: CLIPreset | null =
     selectedPreset !== NONE_PRESET ? (presets[selectedPreset] ?? null) : null;
+  const showPresetEnvFields = activePreset !== null && activePreset.env_vars.length > 0;
+  const showCustomEnvEditor = !showPresetEnvFields;
 
   useEffect(() => {
     if (!open) return;
@@ -63,13 +81,21 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
     setTips(credential?.tips ?? "");
     setAgentId(credential?.agent_id ?? "");
     setEnabled(credential?.enabled ?? true);
-    setEnvValues({});
+    const ek = credential?.env_keys;
+    if (ek && ek.length > 0) {
+      setEnvValues(Object.fromEntries(ek.map((k) => [k, ""])));
+    } else {
+      setEnvValues({});
+    }
     setError("");
   }, [open, credential]);
 
   const applyPreset = (key: string) => {
     setSelectedPreset(key);
-    if (key === NONE_PRESET) return;
+    if (key === NONE_PRESET) {
+      setEnvValues({});
+      return;
+    }
     const p = presets[key];
     if (!p) return;
     setBinaryName(p.binary_name);
@@ -89,6 +115,11 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       setError(t("form.binaryNameRequired"));
       return;
     }
+    const envPayload = nonEmptyEnvPayload(envValues);
+    if (!isEdit && Object.keys(envPayload).length === 0) {
+      setError(t("form.envRequired"));
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -104,7 +135,24 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
         enabled,
       };
       if (selectedPreset !== NONE_PRESET) payload.preset = selectedPreset;
-      if (Object.keys(envValues).length > 0) payload.env = envValues;
+      if (isEdit && credential) {
+        if (Object.keys(envPayload).length > 0) {
+          payload.env = envPayload;
+        }
+        const initialKeys = new Set(credential.env_keys ?? []);
+        const currentKeys = new Set(
+          Object.keys(envValues)
+            .map((k) => k.trim())
+            .filter(Boolean),
+        );
+        const removed = [...initialKeys].filter((k) => !currentKeys.has(k));
+        const removeFiltered = removed.filter((k) => !(k in envPayload));
+        if (removeFiltered.length > 0) {
+          payload.env_remove = removeFiltered;
+        }
+      } else {
+        payload.env = envPayload;
+      }
       await onSubmit(payload);
       onOpenChange(false);
     } catch (err) {
@@ -152,8 +200,8 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
             </p>
           )}
 
-          {/* Env var inputs from preset */}
-          {activePreset && activePreset.env_vars.length > 0 && (
+          {/* Env vars: preset-defined fields, or free-form key/value for manual / edit */}
+          {showPresetEnvFields && activePreset && (
             <div className="grid gap-3 rounded-md border p-3">
               <p className="text-sm font-medium">{t("form.envVars")}</p>
               {activePreset.env_vars.map((ev) => (
@@ -176,6 +224,21 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          {showCustomEnvEditor && (
+            <div className="grid gap-2 rounded-md border p-3">
+              <p className="text-sm font-medium">{t("form.envVars")}</p>
+              <KeyValueEditor
+                value={envValues}
+                onChange={setEnvValues}
+                keyPlaceholder={t("placeholders.envKey")}
+                valuePlaceholder={t("placeholders.envValue")}
+                valuePlaceholderExisting={isEdit ? t("placeholders.envValueUnchanged") : undefined}
+                existingKeys={isEdit ? credential?.env_keys : undefined}
+                addLabel={t("form.addEnvVar")}
+                maskValue={isSensitiveEnvKey}
+              />
             </div>
           )}
 
