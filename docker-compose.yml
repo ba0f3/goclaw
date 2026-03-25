@@ -11,6 +11,7 @@
 #
 #   Without dashboard:  docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 #   With OTel tracing:  docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.otel.yml up -d --build
+#   With Claude CLI:    add -f docker-compose.claude-cli.yml to auto-sync host ~/.claude credentials
 
 services:
   goclaw:
@@ -60,7 +61,7 @@ services:
           pids: 200
     networks:
       - default
-      - shared
+      - goclaw-net
     restart: unless-stopped
 
 volumes:
@@ -70,6 +71,7 @@ volumes:
 # Created by `make net` (docker network create shared). Mark external so Compose does not
 # expect compose-managed labels on a hand-created network.
 networks:
-  shared:
+  goclaw-net:
     external: true
-    name: shared
+    name: goclaw-net
+    driver: bridge
