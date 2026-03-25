@@ -76,3 +76,11 @@ setup:
 	cd ui/web && pnpm install --frozen-lockfile
 
 ci: build test vet check-web
+
+# Larger image: Python + Node + pre-installed skill deps (see Dockerfile ENABLE_* args).
+docker-build-full:
+	ENABLE_PYTHON=true ENABLE_NODE=true ENABLE_FULL_SKILLS=true $(COMPOSE) build
+
+docker-push: docker-build-full
+	docker pussh ghcr.io/nextlevelbuilder/goclaw:latest onion
+	docker pussh ghcr.io/nextlevelbuilder/goclaw-web:latest onion

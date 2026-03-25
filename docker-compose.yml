@@ -21,6 +21,7 @@ services:
       args:
         ENABLE_OTEL: "${ENABLE_OTEL:-false}"
         ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
+        ENABLE_NODE: "${ENABLE_NODE:-false}"
         ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
         VERSION: "${GOCLAW_VERSION:-dev}"
     ports:
@@ -66,7 +67,9 @@ volumes:
   goclaw-data:
   goclaw-workspace:
 
+# Created by `make net` (docker network create shared). Mark external so Compose does not
+# expect compose-managed labels on a hand-created network.
 networks:
   shared:
+    external: true
     name: shared
-    driver: bridge
