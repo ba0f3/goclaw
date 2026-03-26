@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -142,19 +141,15 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 
 	chatID := ToolChatIDFromCtx(ctx)
 
-	// Shared workspace: scope by teamID only. Isolated (default): scope by chatID too.
-	wsChat := chatID
-	if IsSharedWorkspace(team.Settings) {
-		wsChat = ""
-	}
-
-	// Compute the team workspace directory (tenant-scoped) so member agents
-	// write files to the shared team folder instead of their own personal workspace.
+	// Compute team workspace via layered pipeline: tenant → team → user/chat.
+	shared := IsSharedWorkspace(team.Settings)
 	taskMeta := make(map[string]any)
-	tenantBase := config.TenantWorkspace(t.manager.dataDir, store.TenantIDFromContext(ctx), store.TenantSlugFromContext(ctx))
-	if teamWsDir, err := WorkspaceDir(tenantBase, team.ID, wsChat); err == nil {
-		taskMeta["team_workspace"] = teamWsDir
-	}
+	teamWsDir := ResolveWorkspace(t.manager.dataDir,
+		TenantLayer(store.TenantIDFromContext(ctx), store.TenantSlugFromContext(ctx)),
+		TeamLayer(team.ID),
+		UserChatLayer(chatID, shared),
+	)
+	taskMeta["team_workspace"] = teamWsDir
 	// Auto-collect media files from current run to team workspace.
 	// When leader received files from user and creates a task, copy those
 	// files to the team workspace so members can access them via read_file.
@@ -404,12 +399,40 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 		return ErrorResult("only the assigned task owner can update progress. As team lead, task results arrive automatically when members complete their work.")
 	}
 
+	// Early exit: task already terminal — skip DB write entirely.
+	// Reuses the task fetched above (line 391) so no extra query needed.
+	switch task.Status {
+	case store.TeamTaskStatusCompleted, store.TeamTaskStatusFailed, store.TeamTaskStatusCancelled:
+		return SilentResult(fmt.Sprintf("Task already %s — progress update skipped.", task.Status))
+	}
+
 	// Prevent progress regression — keep the higher value.
 	if percent < task.ProgressPercent {
 		percent = task.ProgressPercent
 	}
 
 	if err := t.manager.teamStore.UpdateTaskProgress(ctx, taskID, team.ID, percent, step); err != nil {
+		// Status may have changed between GetTask and UpdateTaskProgress.
+		// Fast path: check in-memory turn flags before hitting DB again.
+		if flags := TaskActionFlagsFromCtx(ctx); flags != nil && flags.Completed {
+			return SilentResult("Task already completed — progress update skipped.")
+		}
+		// Slow path: re-query for stale recovery (pending) or concurrent status change.
+		if current, getErr := t.manager.teamStore.GetTask(ctx, taskID); getErr == nil && current != nil {
+			switch current.Status {
+			case store.TeamTaskStatusCompleted, store.TeamTaskStatusFailed, store.TeamTaskStatusCancelled:
+				return SilentResult(fmt.Sprintf("Task already %s — progress update skipped.", current.Status))
+			case store.TeamTaskStatusPending:
+				// Task was reset by stale recovery — re-assign and retry once.
+				if t.manager.teamStore.AssignTask(ctx, taskID, agentID, team.ID) == nil {
+					if t.manager.teamStore.UpdateTaskProgress(ctx, taskID, team.ID, percent, step) == nil {
+						slog.Info("executeProgress: re-assigned stale-recovered task", "task_id", taskID)
+						recordTaskAction(ctx, func(f *TaskActionFlags) { f.Progressed = true })
+						return SilentResult(fmt.Sprintf("Progress updated: %d%% %s", percent, step))
+					}
+				}
+			}
+		}
 		return ErrorResult("failed to update progress: " + err.Error())
 	}
 	// Record action flag after successful store operation.
