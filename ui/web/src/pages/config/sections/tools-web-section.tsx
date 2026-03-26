@@ -95,6 +95,17 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               />
             </div>
             <div className="grid gap-1.5">
+              <InfoLabel tip={t("tools.braveApiKeyTip")}>{t("tools.braveApiKey")}</InfoLabel>
+              <Input
+                type="password"
+                autoComplete="off"
+                value={brave.api_key ?? ""}
+                onChange={(e) => updateNested("web", { brave: { ...brave, api_key: e.target.value } })}
+                placeholder={t("tools.braveApiKeyPlaceholder")}
+                className="text-base md:text-sm"
+              />
+            </div>
+            <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
               <Input
                 type="number"
