@@ -25,7 +25,6 @@
     "wait": "This may take a moment",
     "fileLabelSOUL": "Core personality",
     "fileLabelIDENTITY": "Identity & knowledge",
-    "fileLabelUSER_PREDEFINED": "User context",
     "agentReady": "{{name}} is ready!",
     "retrying": "Retrying..."
   },
@@ -40,6 +39,7 @@
       "tools": "Tools",
       "cron": "Cron",
       "traces": "Traces",
+      "storage": "Storage",
       "about": "About"
     },
     "theme": "Theme",
