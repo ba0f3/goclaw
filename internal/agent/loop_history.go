@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,29 @@ func (l *Loop) filteredToolNames() []string {
 	return names
 }
 
+// filteredToolNamesForChannel returns tool names after applying both policy
+// and ChannelAware filters. Tools that implement ChannelAware and don't list
+// the current channelType are excluded — keeps the system prompt Tooling
+// section consistent with the actual tool definitions sent to the LLM.
+func (l *Loop) filteredToolNamesForChannel(channelType string) []string {
+	names := l.filteredToolNames()
+	if channelType == "" {
+		return names
+	}
+	filtered := names[:0:0]
+	for _, name := range names {
+		if tool, ok := l.tools.Get(name); ok {
+			if ca, ok := tool.(tools.ChannelAware); ok {
+				if !slices.Contains(ca.RequiredChannelTypes(), channelType) {
+					continue
+				}
+			}
+		}
+		filtered = append(filtered, name)
+	}
+	return filtered
+}
+
 // buildCredentialCLIContext generates the TOOLS.md supplement for credentialed CLIs.
 // Returns empty string if no secure CLI store is configured or no enabled CLIs.
 func (l *Loop) buildCredentialCLIContext(ctx context.Context) string {
@@ -75,7 +99,7 @@ func (l *Loop) buildMCPToolDescs(toolNames []string) map[string]string {
 // buildMessages constructs the full message list for an LLM request.
 // Returns the messages and whether BOOTSTRAP.md was present in context files
 // (used by the caller for auto-cleanup without an extra DB roundtrip).
-func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
+func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, chatTitle, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
 	var messages []providers.Message
 
 	// Build full system prompt using the new builder (matching TS buildAgentSystemPrompt)
@@ -92,20 +116,20 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	_, hasKG := l.tools.Get("knowledge_graph_search")
 
 	// Per-user workspace: show the user's subdirectory in the system prompt.
-	// Uses cached workspace from user_agent_profiles (includes channel isolation).
+	// Uses cached workspace from userSetups (includes channel isolation).
 	// When workspace sharing is enabled, show the base workspace without user subfolder.
 	promptWorkspace := l.workspace
 	if l.agentUUID != uuid.Nil && userID != "" && l.workspace != "" {
 		shared := l.shouldShareWorkspace(userID, peerKind)
-		if cachedWs, ok := l.userWorkspaces.Load(userID); ok {
-			promptWorkspace = tools.ResolveWorkspace(cachedWs.(string),
-				tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
-			)
-		} else {
-			promptWorkspace = tools.ResolveWorkspace(l.workspace,
-				tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
-			)
+		baseWs := l.workspace
+		if val, ok := l.userSetups.Load(userID); ok {
+			if ws := val.(*userSetup).workspace; ws != "" {
+				baseWs = ws
+			}
 		}
+		promptWorkspace = tools.ResolveWorkspace(baseWs,
+			tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
+		)
 	}
 
 	// Resolve context files once — also detect BOOTSTRAP.md presence.
@@ -155,7 +179,9 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	}
 
 	// Build tool list, filtering out skill_manage when skill_evolve is off.
-	toolNames := l.filteredToolNames()
+	// Also applies ChannelAware filtering so channel-specific tools don't
+	// appear in ## Tooling when the current channel doesn't support them.
+	toolNames := l.filteredToolNamesForChannel(channelType)
 	if !l.skillEvolve {
 		filtered := toolNames[:0:0]
 		for _, n := range toolNames {
@@ -191,6 +217,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		Workspace:              promptWorkspace,
 		Channel:                channel,
 		ChannelType:            channelType,
+		ChatTitle:              chatTitle,
 		PeerKind:               peerKind,
 		OwnerIDs:               l.ownerIDs,
 		Mode:                   mode,
