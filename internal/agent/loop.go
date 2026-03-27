@@ -89,25 +89,27 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				imageFiles = append(imageFiles, bus.MediaFile{Path: ref.Path, MimeType: ref.MimeType})
 			}
 		}
-		if images := loadImages(imageFiles); len(images) > 0 {
-			if deferToReadImageTool {
-				// Tool mode: store in context only — agent calls read_image tool.
+		if deferToReadImageTool {
+			// File-ref mode: images primarily accessed via read_image(path=...).
+			// Still load into context as fallback — if LLM omits the path param,
+			// read_image can fall back to context images. This costs Go memory
+			// but NOT LLM tokens (base64 is in Go context, not sent to provider).
+			if images := loadImages(imageFiles); len(images) > 0 {
 				ctx = tools.WithMediaImages(ctx, images)
-				slog.Info("vision: deferring to read_image tool", "count", len(images), "agent", l.id)
-			} else {
-				// Inline mode: attach to message + context.
-				messages[len(messages)-1].Images = images
-				ctx = tools.WithMediaImages(ctx, images)
-				slog.Info("vision: attached images inline to main provider", "count", len(images), "agent", l.id)
 			}
+			slog.Info("vision: file-ref mode, images accessible via read_image tool",
+				"count", len(imageFiles), "agent", l.id)
+		} else if images := loadImages(imageFiles); len(images) > 0 {
+			// Inline mode: read files, base64 encode, attach to message + context.
+			messages[len(messages)-1].Images = images
+			ctx = tools.WithMediaImages(ctx, images)
+			slog.Info("vision: attached images inline to main provider", "count", len(images), "agent", l.id)
 		}
 	}
 
 	// 2a. Load historical images into context for read_image tool.
-	// Without this, read_image can only see current-turn images, not previous turns.
-	// Both inline and tool-deferred modes need this — inline mode attaches images to
-	// messages for the main LLM, but the read_image tool also needs context access
-	// to analyze historical images on demand.
+	// Both modes need this: inline mode for main LLM, file-ref mode as fallback
+	// when LLM calls read_image without the path param.
 	if l.mediaStore != nil {
 		ctx = l.loadHistoricalImagesForTool(ctx, mediaRefs, messages)
 	}
@@ -177,6 +179,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// 2e. Enrich <media:image> tags with persisted media IDs so the LLM
 	// knows images were received and stored (consistent with audio/video enrichment).
 	l.enrichImageIDs(messages, mediaRefs)
+
+	// 2e-ii. In file-ref mode, enrich ALL user messages' image tags with file paths.
+	// This enables read_image(path=...) for both current and historical images.
+	if deferToReadImageTool {
+		l.enrichImagePaths(messages)
+	}
 
 	// 2f. Collect all media file paths for team workspace auto-collect.
 	// When the leader calls team_tasks(create), these paths are copied to the
@@ -287,12 +295,22 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// 3. Buffer new messages — write to session only AFTER the run completes.
 	// This prevents concurrent runs from seeing each other's in-progress messages.
 	// NOTE: pendingMsgs stores text + lightweight MediaRefs (not base64 images).
-	// Initialized here before rs is created; moved to rs after construction.
+	// Use enriched content (with media IDs and paths) from the messages array
+	// instead of raw req.Message, so historical messages retain full refs (RC-1 fix).
 	var initPendingMsgs []providers.Message
 	if !req.HideInput {
+		enrichedContent := req.Message
+		if len(messages) > 0 {
+			for i := len(messages) - 1; i >= 0; i-- {
+				if messages[i].Role == "user" {
+					enrichedContent = messages[i].Content
+					break
+				}
+			}
+		}
 		initPendingMsgs = append(initPendingMsgs, providers.Message{
 			Role:      "user",
-			Content:   req.Message,
+			Content:   enrichedContent,
 			MediaRefs: mediaRefs,
 		})
 	}
