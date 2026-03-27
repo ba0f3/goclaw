@@ -241,6 +241,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Discord notification
+        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           VERSION: v${{ needs.release.outputs.version }}
