@@ -91,7 +91,9 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 	}
 
 	if err := page.WaitStable(300 * time.Millisecond); err != nil {
-		return nil, fmt.Errorf("wait stable: %w", err)
+		if !m.handleWaitStableError(page, err, "open") {
+			return nil, fmt.Errorf("wait stable: %w", err)
+		}
 	}
 	info, _ := page.Info()
 	tid := string(page.TargetID)

@@ -72,7 +72,9 @@ func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
 		return fmt.Errorf("navigate: %w", err)
 	}
 	if err := page.WaitStable(300 * time.Millisecond); err != nil {
-		return fmt.Errorf("wait stable after navigate: %w", err)
+		if !m.handleWaitStableError(page, err, "navigate") {
+			return fmt.Errorf("wait stable after navigate: %w", err)
+		}
 	}
 	return nil
 }
