@@ -32,6 +32,10 @@ interface Props {
   saving: boolean;
 }
 
+function isSecret(val: unknown): boolean {
+  return typeof val === "string" && val.includes("***");
+}
+
 export function ToolsWebSection({ data, onSave, saving }: Props) {
   const { t } = useTranslation("config");
   const [draft, setDraft] = useState<ToolsData>(data ?? {});
@@ -48,6 +52,18 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
       [section]: { ...(prev[section] ?? {}), ...patch },
     }));
     setDirty(true);
+  };
+
+  const handleSave = () => {
+    const toSave: ToolsData = { ...draft };
+    const web = { ...(toSave.web ?? {}) };
+    const brave = { ...(web.brave ?? {}) };
+    if (isSecret(brave.api_key)) {
+      delete brave.api_key;
+    }
+    web.brave = brave;
+    toSave.web = web;
+    onSave(toSave);
   };
 
   if (!data) return null;
@@ -104,6 +120,26 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
                 min={1}
               />
             </div>
+            {brave.enabled && (
+              <div className="grid gap-1.5">
+                <InfoLabel tip={t("tools.braveApiKeyTip")}>{t("tools.braveApiKey")}</InfoLabel>
+                <Input
+                  type="password"
+                  className="text-base md:text-sm"
+                  value={brave.api_key ?? ""}
+                  disabled={isSecret(brave.api_key)}
+                  readOnly={isSecret(brave.api_key)}
+                  onChange={(e) =>
+                    updateNested("web", { brave: { ...brave, api_key: e.target.value } })
+                  }
+                  placeholder={t("tools.braveApiKeyPlaceholder")}
+                  autoComplete="off"
+                />
+                {isSecret(brave.api_key) && (
+                  <p className="text-xs text-muted-foreground">{t("tools.braveApiKeyManaged")}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -181,7 +217,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
 
         {dirty && (
           <div className="flex justify-end pt-2">
-            <Button size="sm" onClick={() => onSave(draft)} disabled={saving} className="gap-1.5">
+            <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
               <Save className="h-3.5 w-3.5" /> {saving ? t("saving") : t("save")}
             </Button>
           </div>
