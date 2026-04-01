@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 
 	"github.com/google/uuid"
 
@@ -23,22 +24,35 @@ func (h *SecureCLIHandler) handleListUserCredentials(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, err.Error())})
 		return
 	}
-	// Return without encrypted env for listing (only user_id + timestamps)
+	// Return without env values for listing (names only + timestamps)
 	type entry struct {
 		ID        uuid.UUID `json:"id"`
 		BinaryID  uuid.UUID `json:"binary_id"`
 		UserID    string    `json:"user_id"`
 		HasEnv    bool      `json:"has_env"`
+		EnvKeys   []string  `json:"env_keys,omitempty"`
 		CreatedAt string    `json:"created_at"`
 		UpdatedAt string    `json:"updated_at"`
 	}
 	entries := make([]entry, 0, len(creds))
 	for _, c := range creds {
+		hasEnv := len(c.EncryptedEnv) > 0
+		var envKeys []string
+		if hasEnv {
+			var m map[string]any
+			if err := json.Unmarshal(c.EncryptedEnv, &m); err == nil {
+				for k := range m {
+					envKeys = append(envKeys, k)
+				}
+				sort.Strings(envKeys)
+			}
+		}
 		entries = append(entries, entry{
 			ID:        c.ID,
 			BinaryID:  c.BinaryID,
 			UserID:    c.UserID,
-			HasEnv:    len(c.EncryptedEnv) > 0,
+			HasEnv:    hasEnv,
+			EnvKeys:   envKeys,
 			CreatedAt: c.CreatedAt,
 			UpdatedAt: c.UpdatedAt,
 		})
