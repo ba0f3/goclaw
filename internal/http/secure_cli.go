@@ -96,7 +96,7 @@ func mergeSecureCLIEnv(existingJSON []byte, incoming map[string]any) (map[string
 		}
 		sv, err := envValueAsString(v)
 		if err != nil {
-			return nil, fmt.Errorf("env key %q: %w", k, err)
+			return nil, fmt.Errorf("invalid environment variable value")
 		}
 		if sv != "" {
 			out[k] = sv

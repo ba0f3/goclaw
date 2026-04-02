@@ -140,11 +140,17 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   const splitCommaList = (v: string): string[] =>
     v.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const buildEnvPayload = (): Record<string, string> => {
+  const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+  const buildEnvPayload = (): Record<string, string> | null => {
     if (!isManualMode) return envValues;
     const env: Record<string, string> = {};
     for (const entry of manualEnvEntries) {
       const k = entry.key.trim();
+      if (k && !ENV_KEY_PATTERN.test(k)) {
+        setError(t("form.invalidEnvKey", { key: k }));
+        return null;
+      }
       if (k) env[k] = entry.value;
     }
     return env;
@@ -171,6 +177,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       };
       if (selectedPreset !== NONE_PRESET) payload.preset = selectedPreset;
       const env = buildEnvPayload();
+      if (!env) return;
       if (Object.keys(env).length > 0) {
         payload.env = env;
       } else if (isEdit && isManualMode && initialEnvKeys.length > 0) {

@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/json"
 	"net/http"
-	"sort"
 
 	"github.com/google/uuid"
 
@@ -36,22 +35,12 @@ func (h *SecureCLIHandler) handleListUserCredentials(w http.ResponseWriter, r *h
 	}
 	entries := make([]entry, 0, len(creds))
 	for _, c := range creds {
-		hasEnv := len(c.EncryptedEnv) > 0
-		var envKeys []string
-		if hasEnv {
-			var m map[string]any
-			if err := json.Unmarshal(c.EncryptedEnv, &m); err == nil {
-				for k := range m {
-					envKeys = append(envKeys, k)
-				}
-				sort.Strings(envKeys)
-			}
-		}
+		envKeys := envKeysFromDecryptedJSON(c.EncryptedEnv)
 		entries = append(entries, entry{
 			ID:        c.ID,
 			BinaryID:  c.BinaryID,
 			UserID:    c.UserID,
-			HasEnv:    hasEnv,
+			HasEnv:    len(c.EncryptedEnv) > 0,
 			EnvKeys:   envKeys,
 			CreatedAt: c.CreatedAt,
 			UpdatedAt: c.UpdatedAt,
@@ -133,6 +122,7 @@ func (h *SecureCLIHandler) handleSetUserCredentials(w http.ResponseWriter, r *ht
 		return
 	}
 
+	emitAudit(h.msgBus, r, "secure_cli.user_credentials.updated", "secure_cli_user_credentials", binaryID.String()+"/"+userID)
 	h.emitCacheInvalidate("")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -156,6 +146,7 @@ func (h *SecureCLIHandler) handleDeleteUserCredentials(w http.ResponseWriter, r 
 		return
 	}
 
+	emitAudit(h.msgBus, r, "secure_cli.user_credentials.deleted", "secure_cli_user_credentials", binaryID.String()+"/"+userID)
 	h.emitCacheInvalidate("")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
