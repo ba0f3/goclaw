@@ -49,6 +49,15 @@ func Default() *Config {
 			Web: WebToolsConfig{
 				DuckDuckGo: DuckDuckGoConfig{Enabled: true, MaxResults: 5},
 			},
+			RAG: RAGConfig{
+				Enabled:            true,
+				MaxFileBytes:       20 * 1024 * 1024,
+				ChunkTokens:        400,
+				ChunkOverlapPct:    15,
+				WebIndexEnabled:    true,
+				DefaultWebTTLHours: 48,
+				MaxDocsPerAgent:    1000,
+			},
 			Browser: BrowserToolConfig{
 				Enabled:  true,
 				Headless: true,
@@ -280,6 +289,40 @@ func (c *Config) applyEnvOverrides() {
 	if c.Tools.Browser.RemoteURL != "" {
 		c.Tools.Browser.Enabled = true
 	}
+
+	// RAG env overrides
+	if v := os.Getenv("GOCLAW_RAG_ENABLED"); v != "" {
+		c.Tools.RAG.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("GOCLAW_RAG_MAX_FILE_BYTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.Tools.RAG.MaxFileBytes = n
+		}
+	}
+	if v := os.Getenv("GOCLAW_RAG_CHUNK_TOKENS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.Tools.RAG.ChunkTokens = n
+		}
+	}
+	if v := os.Getenv("GOCLAW_RAG_CHUNK_OVERLAP_PCT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n < 100 {
+			c.Tools.RAG.ChunkOverlapPct = n
+		}
+	}
+	if v := os.Getenv("GOCLAW_RAG_WEB_INDEX_ENABLED"); v != "" {
+		c.Tools.RAG.WebIndexEnabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("GOCLAW_RAG_DEFAULT_WEB_TTL_HOURS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.Tools.RAG.DefaultWebTTLHours = n
+		}
+	}
+	if v := os.Getenv("GOCLAW_RAG_MAX_DOCS_PER_AGENT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.Tools.RAG.MaxDocsPerAgent = n
+		}
+	}
+	envStr("GOCLAW_RAG_EMBED_PROVIDER", &c.Tools.RAG.EmbedProvider)
 }
 
 

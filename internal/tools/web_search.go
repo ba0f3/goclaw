@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // Matching TS src/agents/tools/web-search.ts constants.
@@ -70,6 +73,7 @@ func normalizeFreshness(value string) string {
 type WebSearchTool struct {
 	providers []SearchProvider
 	cache     *webCache
+	ragIngester RAGIngester
 }
 
 // WebSearchConfig holds configuration for the web search tool.
@@ -107,6 +111,9 @@ func NewWebSearchTool(cfg WebSearchConfig) *WebSearchTool {
 		cache:     newWebCache(defaultCacheMaxEntries, ttl),
 	}
 }
+
+// SetRAGIngester wires an optional ingester for asynchronous indexing.
+func (t *WebSearchTool) SetRAGIngester(i RAGIngester) { t.ragIngester = i }
 
 func (t *WebSearchTool) Name() string { return "web_search" }
 
@@ -194,6 +201,37 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 		formatted := formatSearchResults(query, results, provider.Name())
 		wrapped := wrapExternalContent(formatted, "Web Search", false)
+
+		// Async RAG indexing of snippets (non-blocking; never affects tool result).
+		if t.ragIngester != nil {
+			// Keep ctx-derived identifiers stable for the goroutine.
+			userID := store.UserIDFromContext(ctx)
+			agentID := store.AgentIDFromContext(ctx)
+			_ = agentID // just to keep parity with web_fetch logging; ingester uses ctx for scoping.
+			for _, r := range results {
+				url := r.URL
+				content := strings.TrimSpace(r.Title + "\n" + r.Description)
+				if url == "" || content == "" {
+					continue
+				}
+				// The ingester will handle dedup via (source_ref, content_hash).
+				idxCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+				go func(url, content, userID string) {
+					defer cancel()
+					defer func() {
+						if rec := recover(); rec != nil {
+							slog.Warn("web_search: rag indexing panic recovered", "panic", rec)
+						}
+					}()
+					_ = t.ragIngester.IndexWebContent(idxCtx, rag.WebContent{
+						URL:        url,
+						Content:    content,
+						SourceType: "web_search",
+						TTL:        6 * time.Hour,
+					})
+				}(url, content, userID)
+			}
+		}
 
 		t.cache.set(cacheKey, wrapped)
 		return NewResult(wrapped)

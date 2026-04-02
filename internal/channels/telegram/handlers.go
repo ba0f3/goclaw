@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -405,12 +406,34 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 					m.Transcript = transcript
 				}
 			case "document":
+				// Extract document content for immediate LLM context (existing behavior).
 				if m.FileName != "" && m.FilePath != "" {
 					docContent, err := extractDocumentContent(m.FilePath, m.FileName)
 					if err != nil {
 						slog.Warn("document extraction failed", "file", m.FileName, "error", err)
 					} else if docContent != "" {
 						extraContent += "\n\n" + docContent
+					}
+				}
+
+				// Async: Index into RAG (if enabled) to allow rag_search over prior attachments.
+				if c.attachmentHandler != nil && m.FilePath != "" {
+					attBytes, readErr := os.ReadFile(m.FilePath)
+					if readErr != nil {
+						slog.Warn("telegram: failed to read downloaded document for rag indexing",
+							"file", m.FileName, "error", readErr)
+					} else {
+						att := channels.Attachment{
+							Bytes:    attBytes,
+							MimeType: m.ContentType,
+							FileName: m.FileName,
+							Size:     len(attBytes),
+						}
+						sess := channels.SessionInfo{SessionKey: ""}
+						go func() {
+							// Best-effort; do not block message processing.
+							_, _ = c.attachmentHandler.HandleAttachment(context.WithoutCancel(ctx), att, sess)
+						}()
 					}
 				}
 			case "video", "animation":

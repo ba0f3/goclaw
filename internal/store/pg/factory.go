@@ -25,6 +25,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		DB:        db,
 		Sessions:  NewPGSessionStore(db),
 		Memory:    NewPGMemoryStore(db, memCfg),
+		RAG:       NewPGRAGStore(db),
 		Cron:      NewPGCronStore(db),
 		Pairing:   NewPGPairingStore(db),
 		Skills:    NewPGSkillStore(db, skillsDir),
