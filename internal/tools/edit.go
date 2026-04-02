@@ -215,7 +215,7 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 		return result
 	}
 
-	if err := bridge.WriteFile(ctx, containerPath, newContent); err != nil {
+	if err := bridge.WriteFile(ctx, containerPath, newContent, false); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to write file: %v", err) + MaybeFsBridgeHint(err))
 	}
 
