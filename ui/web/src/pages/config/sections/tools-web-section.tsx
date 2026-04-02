@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { InfoLabel } from "@/components/shared/info-label";
+import { isSecret } from "@/lib/secret";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type ToolsData = Record<string, any>;
@@ -30,10 +31,6 @@ interface Props {
   data: ToolsData | undefined;
   onSave: (value: ToolsData) => Promise<void>;
   saving: boolean;
-}
-
-function isSecret(val: unknown): boolean {
-  return typeof val === "string" && val.includes("***");
 }
 
 export function ToolsWebSection({ data, onSave, saving }: Props) {
@@ -95,6 +92,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
               <Input
                 type="number"
+                className="text-base md:text-sm"
                 value={ddg.max_results ?? ""}
                 onChange={(e) => updateNested("web", { duckduckgo: { ...ddg, max_results: Number(e.target.value) } })}
                 placeholder="5"
@@ -114,6 +112,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
               <Input
                 type="number"
+                className="text-base md:text-sm"
                 value={brave.max_results ?? ""}
                 onChange={(e) => updateNested("web", { brave: { ...brave, max_results: Number(e.target.value) } })}
                 placeholder="5"
