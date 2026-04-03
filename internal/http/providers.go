@@ -159,6 +159,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			mcpData.AgentMCPLookup = h.mcpLookup
 			cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 		}
+		cliOpts = append(cliOpts, providers.WithClaudeCLIRegistryName(p.Name))
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewClaudeCLIProvider(cliPath, cliOpts...))
 		return
 	}

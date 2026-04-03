@@ -35,10 +35,15 @@ const OptWorkspace = "workspace"
 // Required for memory indexing and tenant-scoped queries via bridge tools.
 const OptTenantID = "tenant_id"
 
+// DefaultClaudeCLIRegistryName is the in-memory registry key when no custom name is set
+// (e.g. config-file registration). DB-backed providers use WithClaudeCLIRegistryName(p.Name).
+const DefaultClaudeCLIRegistryName = "claude-cli"
+
 // ClaudeCLIProvider implements Provider by shelling out to the `claude` CLI binary.
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.
 type ClaudeCLIProvider struct {
+	registryName       string // key in Provider registry — must match llm_providers.name / agent.provider
 	cliPath            string // path to claude binary (default: "claude")
 	defaultModel       string // default: "sonnet"
 	baseWorkDir        string // base dir for agent workspaces
@@ -53,6 +58,16 @@ type ClaudeCLIProvider struct {
 
 // ClaudeCLIOption configures the provider.
 type ClaudeCLIOption func(*ClaudeCLIProvider)
+
+// WithClaudeCLIRegistryName sets the registry lookup name (DB slug). Required for multi-tenant
+// DB providers so agent.provider matches Registry.GetForTenant. Empty leaves the default.
+func WithClaudeCLIRegistryName(name string) ClaudeCLIOption {
+	return func(p *ClaudeCLIProvider) {
+		if name != "" {
+			p.registryName = name
+		}
+	}
+}
 
 // WithClaudeCLIModel sets the default model alias.
 func WithClaudeCLIModel(model string) ClaudeCLIOption {
@@ -110,6 +125,7 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 		cliPath = "claude"
 	}
 	p := &ClaudeCLIProvider{
+		registryName: DefaultClaudeCLIRegistryName,
 		cliPath:      cliPath,
 		defaultModel: "sonnet",
 		baseWorkDir:  defaultCLIWorkDir(),
@@ -122,7 +138,11 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 	return p
 }
 
-func (p *ClaudeCLIProvider) Name() string        { return "claude-cli" }
+func (p *ClaudeCLIProvider) Name() string { return p.registryName }
+
+// ProviderType returns the DB provider_type value for Claude CLI.
+func (p *ClaudeCLIProvider) ProviderType() string { return "claude_cli" }
+
 func (p *ClaudeCLIProvider) DefaultModel() string { return p.defaultModel }
 
 // Close cleans up temp files (per-session MCP configs, hooks settings). Implements io.Closer.

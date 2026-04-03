@@ -166,8 +166,9 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 		// Enable GoClaw security hooks (shell deny patterns, path restrictions)
 		opts = append(opts, providers.WithClaudeCLISecurityHooks(
 			cfg.Providers.ClaudeCLI.BaseWorkDir, true))
-		registry.Register(providers.NewClaudeCLIProvider(cliPath, opts...))
-		slog.Info("registered provider", "name", "claude-cli")
+		cliProv := providers.NewClaudeCLIProvider(cliPath, opts...)
+		registry.Register(cliProv)
+		slog.Info("registered provider", "name", cliProv.Name())
 	}
 
 	// ACP provider (config-based) — orchestrates any ACP-compatible agent binary
@@ -274,6 +275,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				mcpData.AgentMCPLookup = buildMCPServerLookup(mcpStore)
 				cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 			}
+			cliOpts = append(cliOpts, providers.WithClaudeCLIRegistryName(p.Name))
 			registry.RegisterForTenant(p.TenantID, providers.NewClaudeCLIProvider(cliPath, cliOpts...))
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
