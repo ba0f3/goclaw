@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 )
 
 // Matching TS src/agents/tools/web-fetch.ts constants.
@@ -32,6 +34,7 @@ type WebFetchTool struct {
 	policy         string   // "allow_all" (default), "allowlist"
 	allowedDomains []string // domains when policy="allowlist" (supports "*.example.com")
 	blockedDomains []string // always checked regardless of policy (supports "*.example.com")
+	ragIngester    RAGIngester
 	mu             sync.RWMutex
 }
 
@@ -64,6 +67,13 @@ func NewWebFetchTool(cfg WebFetchConfig) *WebFetchTool {
 		allowedDomains: cfg.AllowedDomains,
 		blockedDomains: cfg.BlockedDomains,
 	}
+}
+
+// SetRAGIngester wires an optional ingester for asynchronous indexing.
+func (t *WebFetchTool) SetRAGIngester(i RAGIngester) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ragIngester = i
 }
 
 // UpdatePolicy replaces the domain policy at runtime (called via pub/sub on config change).
@@ -216,6 +226,31 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]any) *Result
 	if err != nil {
 		errMsg := truncateStr(err.Error(), defaultErrorMaxChars)
 		return ErrorResult(fmt.Sprintf("fetch failed: %s", errMsg))
+	}
+
+	// Async: index fetched content into RAG (non-blocking).
+	// IMPORTANT: never skip the fetch itself; dedup happens inside the ingester/store.
+	t.mu.RLock()
+	ing := t.ragIngester
+	t.mu.RUnlock()
+	if ing != nil {
+		urlCopy := rawURL
+		contentCopy := result
+		idxCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		go func() {
+			defer cancel()
+			defer func() {
+				if rec := recover(); rec != nil {
+					slog.Warn("web_fetch: rag indexing panic recovered", "panic", rec)
+				}
+			}()
+			_ = ing.IndexWebContent(idxCtx, rag.WebContent{
+				URL:        urlCopy,
+				Content:    contentCopy,
+				SourceType: "web_fetch",
+				TTL:        rag.ClassifyTTL(urlCopy),
+			})
+		}()
 	}
 
 	wrapped := wrapExternalContent(result, "Web Fetch", true)

@@ -33,6 +33,7 @@ type Channel struct {
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
 	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
 	subagentTaskStore store.SubagentTaskStore     // for /subagents, /subagent commands (nil if not configured)
+	attachmentHandler channels.AttachmentHandler  // optional: RAG indexing etc.
 	placeholders      sync.Map                    // localKey string → messageID int
 	stopThinking      sync.Map                    // localKey string → *thinkingCancel
 	typingCtrls       sync.Map                    // localKey string → *typing.Controller
@@ -78,6 +79,11 @@ func WithTeamStore(s store.TeamStore) Option { return func(c *Channel) { c.teamS
 // WithSubagentTaskStore sets the subagent task store for /subagents, /subagent commands.
 func WithSubagentTaskStore(s store.SubagentTaskStore) Option {
 	return func(c *Channel) { c.subagentTaskStore = s }
+}
+
+// WithAttachmentHandler sets the attachment handler (optional).
+func WithAttachmentHandler(h channels.AttachmentHandler) Option {
+	return func(c *Channel) { c.attachmentHandler = h }
 }
 
 // WithPendingMessageStore sets the pending message store for group history buffering.

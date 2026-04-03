@@ -132,6 +132,9 @@ func setupToolRegistry(
 	toolsReg.Register(webFetchTool)
 	slog.Info("web_fetch tool enabled", "policy", cfg.Tools.WebFetch.Policy, "blocked", len(cfg.Tools.WebFetch.BlockedDomains))
 
+	// RAG search tool (RAG subsystem may be disabled at runtime; tool is still registered).
+	toolsReg.Register(tools.NewRAGSearchTool())
+
 	// Vision fallback tool (for non-vision providers like MiniMax)
 	toolsReg.Register(tools.NewReadImageTool(providerRegistry))
 	toolsReg.Register(tools.NewCreateImageTool(providerRegistry))

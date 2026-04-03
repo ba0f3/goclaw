@@ -67,6 +67,11 @@ type MemoryStoreAware interface {
 	SetMemoryStore(store.MemoryStore)
 }
 
+// RAGStoreAware tools can receive a RAGStore for Postgres queries.
+type RAGStoreAware interface {
+	SetRAGStore(store.RAGStore)
+}
+
 // ApprovalAware tools can receive an ExecApprovalManager.
 type ApprovalAware interface {
 	SetApprovalManager(*ExecApprovalManager, string)

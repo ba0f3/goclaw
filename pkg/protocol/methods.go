@@ -169,6 +169,12 @@ const (
 const (
 	MethodLogsTail = "logs.tail"
 
+	// RAG management
+	MethodRAGUpload = "rag.upload"
+	MethodRAGList   = "rag.list"
+	MethodRAGDelete = "rag.delete"
+	MethodRAGReindex = "rag.reindex"
+
 	MethodTTSStatus      = "tts.status"
 	MethodTTSEnable      = "tts.enable"
 	MethodTTSDisable     = "tts.disable"

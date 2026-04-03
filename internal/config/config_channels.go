@@ -361,10 +361,23 @@ type ToolsConfig struct {
 	ExecApproval     ExecApprovalCfg             `json:"execApproval"`         // exec command approval settings
 	WebFetch         WebFetchPolicyConfig        `json:"web_fetch"`            // domain policy for URL fetching
 	Web              WebToolsConfig              `json:"web"`
+	RAG              RAGConfig                   `json:"rag"`
 	Browser          BrowserToolConfig           `json:"browser"`
 	RateLimitPerHour int                         `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)
 	ScrubCredentials *bool                       `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
 	McpServers       map[string]*MCPServerConfig `json:"mcp_servers,omitempty"`         // external MCP server connections
+}
+
+// RAGConfig controls retrieval-augmented generation indexing/search.
+type RAGConfig struct {
+	Enabled            bool   `json:"enabled"`
+	MaxFileBytes       int    `json:"max_file_bytes,omitempty"`
+	ChunkTokens        int    `json:"chunk_tokens,omitempty"`
+	ChunkOverlapPct    int    `json:"chunk_overlap_pct,omitempty"`
+	WebIndexEnabled    bool   `json:"web_index_enabled,omitempty"`
+	DefaultWebTTLHours int    `json:"default_web_ttl_hours,omitempty"`
+	MaxDocsPerAgent    int    `json:"max_docs_per_agent,omitempty"`
+	EmbedProvider      string `json:"embed_provider,omitempty"`
 }
 
 // MCPServerConfig configures a single external MCP server connection.

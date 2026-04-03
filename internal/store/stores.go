@@ -7,6 +7,7 @@ type Stores struct {
 	DB        *sql.DB // underlying connection
 	Sessions  SessionStore
 	Memory    MemoryStore
+	RAG       RAGStore
 	Cron      CronStore
 	Pairing   PairingStore
 	Skills    SkillStore

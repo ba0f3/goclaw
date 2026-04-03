@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -19,6 +20,7 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -27,6 +29,33 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+func ragConfigFromAppConfig(appCfg *config.Config) rag.Config {
+	cfg := rag.DefaultConfig()
+	if appCfg == nil {
+		return cfg
+	}
+	rc := appCfg.Tools.RAG
+	cfg.Enabled = rc.Enabled
+	if rc.MaxFileBytes > 0 {
+		cfg.MaxFileBytes = rc.MaxFileBytes
+	}
+	if rc.ChunkTokens > 0 {
+		cfg.ChunkTokens = rc.ChunkTokens
+	}
+	if rc.ChunkOverlapPct > 0 {
+		cfg.ChunkOverlapPct = rc.ChunkOverlapPct
+	}
+	// Default: true (matches plan). Allow explicit disable via config.
+	cfg.WebIndexEnabled = rc.WebIndexEnabled
+	if rc.DefaultWebTTLHours > 0 {
+		cfg.DefaultWebTTL = time.Duration(rc.DefaultWebTTLHours) * time.Hour
+	}
+	if rc.MaxDocsPerAgent > 0 {
+		cfg.MaxDocsPerAgent = rc.MaxDocsPerAgent
+	}
+	return cfg
+}
 
 // wireExtras wires components that require PG stores:
 // agent resolver (lazy-creates Loops from DB), virtual FS interceptors, memory tools,
@@ -87,6 +116,41 @@ func wireExtras(
 			if et, ok := execTool.(*tools.ExecTool); ok {
 				et.SetSecureCLIStore(stores.SecureCLI)
 			}
+		}
+	}
+
+	// 1f. RAG tools + web indexing hooks (PG-only in v1).
+	var ragIngester *rag.Ingester
+	if appCfg.Tools.RAG.Enabled && stores.RAG != nil {
+		embProvider := resolveEmbeddingProvider(stores.Providers, providerReg, stores.SystemConfigs)
+		if embProvider != nil {
+			ragIngester = rag.NewIngester(ragConfigFromAppConfig(appCfg), stores.RAG, embProvider)
+
+			// Wire ingester into tools that support it.
+			if t, ok := toolsReg.Get("rag_search"); ok {
+				if rt, ok := t.(*tools.RAGSearchTool); ok {
+					rt.SetRAGIngester(ragIngester)
+				}
+			}
+			if t, ok := toolsReg.Get("web_fetch"); ok {
+				if wf, ok := t.(*tools.WebFetchTool); ok {
+					wf.SetRAGIngester(ragIngester)
+				}
+			}
+			if t, ok := toolsReg.Get("web_search"); ok {
+				if ws, ok := t.(*tools.WebSearchTool); ok {
+					ws.SetRAGIngester(ragIngester)
+				}
+			}
+
+			// Start hourly cleanup worker (internal cron; not user-configurable).
+			go rag.StartCleanupWorker(context.Background(), stores.RAG, rag.CleanupConfig{
+				Interval:        time.Hour,
+				MaxDocsPerAgent: appCfg.Tools.RAG.MaxDocsPerAgent,
+				MaxChunkAge:     30 * 24 * time.Hour,
+			})
+		} else {
+			slog.Warn("rag disabled: no embedding provider configured")
 		}
 	}
 
