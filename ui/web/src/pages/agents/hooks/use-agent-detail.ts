@@ -6,7 +6,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
 import i18n from "@/i18n";
 import { userFriendlyError } from "@/lib/error-utils";
-import type { AgentData, BootstrapFile } from "@/types/agent";
+import type { AgentData, AgentUpdateResponse, BootstrapFile } from "@/types/agent";
 
 interface AgentDetailData {
   agent: AgentData;
@@ -71,12 +71,13 @@ export function useAgentDetail(agentId: string | undefined) {
   }, [queryClient, agentId]);
 
   const updateAgent = useCallback(
-    async (updates: Record<string, unknown>) => {
-      if (!agentId) return;
+    async (updates: Record<string, unknown>): Promise<AgentUpdateResponse | undefined> => {
+      if (!agentId) return undefined;
       try {
-        await http.put(`/v1/agents/${agentId}`, updates);
+        const res = await http.put<AgentUpdateResponse>(`/v1/agents/${agentId}`, updates);
         await invalidate();
         toast.success(i18n.t("agents:toast.updated"));
+        return res;
       } catch (err) {
         toast.error(i18n.t("agents:toast.updateFailed"), userFriendlyError(err));
         throw err;

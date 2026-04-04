@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -16,9 +17,10 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 	}
 
 	aid := mustParseUUID(agentID)
+	ragGroupPrefix := rag.GroupDocumentPathPrefix(opts.RAGGroupID)
 
 	// FTS search using tsvector
-	ftsResults, err := s.ftsSearch(ctx, query, aid, userID, maxResults*2)
+	ftsResults, err := s.ftsSearch(ctx, query, aid, userID, ragGroupPrefix, opts.RAGPersonalOwnerID, maxResults*2)
 	if err != nil {
 		return nil, err
 	}
@@ -28,12 +30,16 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 	if s.provider != nil {
 		embeddings, err := s.provider.Embed(ctx, []string{query})
 		if err == nil && len(embeddings) > 0 {
-			vecResults, err = s.vectorSearch(ctx, embeddings[0], aid, userID, maxResults*2)
+			vecResults, err = s.vectorSearch(ctx, embeddings[0], aid, userID, ragGroupPrefix, opts.RAGPersonalOwnerID, maxResults*2)
 			if err != nil {
 				vecResults = nil
 			}
 		}
 	}
+
+	sharedMem := store.IsSharedMemory(ctx)
+	ftsResults = filterRAGScoredChunks(ftsResults, userID, opts.RAGGroupID, opts.RAGPersonalOwnerID, sharedMem)
+	vecResults = filterRAGScoredChunks(vecResults, userID, opts.RAGGroupID, opts.RAGPersonalOwnerID, sharedMem)
 
 	// Merge results — use per-query overrides if set, else store defaults
 	textW, vecW := s.cfg.TextWeight, s.cfg.VectorWeight
@@ -77,7 +83,20 @@ type scoredChunk struct {
 	UserID    *string
 }
 
-func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any, userID string, limit int) ([]scoredChunk, error) {
+func filterRAGScoredChunks(chunks []scoredChunk, querierID, ragGroupID, ragPersonalOwnerID string, sharedMemory bool) []scoredChunk {
+	if len(chunks) == 0 {
+		return chunks
+	}
+	out := make([]scoredChunk, 0, len(chunks))
+	for _, c := range chunks {
+		if rag.VisibleRAGMemoryChunk(c.Path, c.UserID, querierID, ragGroupID, ragPersonalOwnerID, sharedMemory) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any, userID, ragGroupPrefix, ragPersonalOwnerID string, limit int) ([]scoredChunk, error) {
 	var q string
 	var args []any
 
@@ -96,34 +115,72 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		args = append([]any{query, agentID, query}, tcArgs...)
 		args = append(args, limit)
 	} else if userID != "" {
-		// fixed params: $1=query, $2=agentID, $3=query, $4=userID
-		tc, tcArgs, _, err := scopeClause(ctx, 5)
+		var userSQL string
+		var core []any
+		tcStart := 5
+		if ragGroupPrefix != "" {
+			if ragPersonalOwnerID != "" {
+				userSQL = `AND (
+				user_id IS NULL OR user_id = $4
+				OR position($5 in path) = 1
+				OR (user_id = $6 AND path LIKE 'rag/dm/%')
+			)`
+				core = []any{query, agentID, query, userID, ragGroupPrefix, ragPersonalOwnerID}
+				tcStart = 7
+			} else {
+				userSQL = `AND (
+				user_id IS NULL OR user_id = $4
+				OR position($5 in path) = 1
+			)`
+				core = []any{query, agentID, query, userID, ragGroupPrefix}
+				tcStart = 6
+			}
+		} else {
+			userSQL = `AND (user_id IS NULL OR user_id = $4)`
+			core = []any{query, agentID, query, userID}
+			tcStart = 5
+		}
+		tc, tcArgs, _, err := scopeClause(ctx, tcStart)
 		if err != nil {
 			return nil, err
 		}
-		limitN := 5 + len(tcArgs)
+		limitN := tcStart + len(tcArgs)
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
 				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
 			FROM memory_chunks
 			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
-			AND (user_id IS NULL OR user_id = $4)%s
-			ORDER BY score DESC LIMIT $%d`, tc, limitN)
-		args = append([]any{query, agentID, query, userID}, tcArgs...)
+			%s%s
+			ORDER BY score DESC LIMIT $%d`, userSQL, tc, limitN)
+		args = append(core, tcArgs...)
 		args = append(args, limit)
 	} else {
-		// fixed params: $1=query, $2=agentID, $3=query
-		tc, tcArgs, _, err := scopeClause(ctx, 4)
+		var userSQL string
+		var core []any
+		tcStart := 4
+		if ragGroupPrefix != "" {
+			userSQL = `AND (
+				user_id IS NULL
+				OR position($4 in path) = 1
+			)`
+			core = []any{query, agentID, query, ragGroupPrefix}
+			tcStart = 5
+		} else {
+			userSQL = `AND user_id IS NULL`
+			core = []any{query, agentID, query}
+			tcStart = 4
+		}
+		tc, tcArgs, _, err := scopeClause(ctx, tcStart)
 		if err != nil {
 			return nil, err
 		}
-		limitN := 4 + len(tcArgs)
+		limitN := tcStart + len(tcArgs)
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
 				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
 			FROM memory_chunks
 			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
-			AND user_id IS NULL%s
-			ORDER BY score DESC LIMIT $%d`, tc, limitN)
-		args = append([]any{query, agentID, query}, tcArgs...)
+			%s%s
+			ORDER BY score DESC LIMIT $%d`, userSQL, tc, limitN)
+		args = append(core, tcArgs...)
 		args = append(args, limit)
 	}
 
@@ -142,7 +199,7 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 	return results, nil
 }
 
-func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, agentID any, userID string, limit int) ([]scoredChunk, error) {
+func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, agentID any, userID, ragGroupPrefix, ragPersonalOwnerID string, limit int) ([]scoredChunk, error) {
 	vecStr := vectorToString(embedding)
 
 	var q string
@@ -164,36 +221,74 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 		args = append([]any{vecStr, agentID}, tcArgs...)
 		args = append(args, vecStr, limit)
 	} else if userID != "" {
-		// fixed params: $1=vec, $2=agentID, $3=userID
-		tc, tcArgs, _, err := scopeClause(ctx, 4)
+		var userSQL string
+		var core []any
+		tcStart := 4
+		if ragGroupPrefix != "" {
+			if ragPersonalOwnerID != "" {
+				userSQL = `AND (
+				user_id IS NULL OR user_id = $3
+				OR position($4 in path) = 1
+				OR (user_id = $5 AND path LIKE 'rag/dm/%')
+			)`
+				core = []any{vecStr, agentID, userID, ragGroupPrefix, ragPersonalOwnerID}
+				tcStart = 6
+			} else {
+				userSQL = `AND (
+				user_id IS NULL OR user_id = $3
+				OR position($4 in path) = 1
+			)`
+				core = []any{vecStr, agentID, userID, ragGroupPrefix}
+				tcStart = 5
+			}
+		} else {
+			userSQL = `AND (user_id IS NULL OR user_id = $3)`
+			core = []any{vecStr, agentID, userID}
+			tcStart = 4
+		}
+		tc, tcArgs, _, err := scopeClause(ctx, tcStart)
 		if err != nil {
 			return nil, err
 		}
-		orderN := 4 + len(tcArgs)
+		orderN := tcStart + len(tcArgs)
 		limitN := orderN + 1
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
 				1 - (embedding <=> $1::vector) AS score
 			FROM memory_chunks
 			WHERE agent_id = $2 AND embedding IS NOT NULL
-			AND (user_id IS NULL OR user_id = $3)%s
-			ORDER BY embedding <=> $%d::vector LIMIT $%d`, tc, orderN, limitN)
-		args = append([]any{vecStr, agentID, userID}, tcArgs...)
+			%s%s
+			ORDER BY embedding <=> $%d::vector LIMIT $%d`, userSQL, tc, orderN, limitN)
+		args = append(core, tcArgs...)
 		args = append(args, vecStr, limit)
 	} else {
-		// fixed params: $1=vec, $2=agentID
-		tc, tcArgs, _, err := scopeClause(ctx, 3)
+		var userSQL string
+		var core []any
+		tcStart := 3
+		if ragGroupPrefix != "" {
+			userSQL = `AND (
+				user_id IS NULL
+				OR position($3 in path) = 1
+			)`
+			core = []any{vecStr, agentID, ragGroupPrefix}
+			tcStart = 4
+		} else {
+			userSQL = `AND user_id IS NULL`
+			core = []any{vecStr, agentID}
+			tcStart = 3
+		}
+		tc, tcArgs, _, err := scopeClause(ctx, tcStart)
 		if err != nil {
 			return nil, err
 		}
-		orderN := 3 + len(tcArgs)
+		orderN := tcStart + len(tcArgs)
 		limitN := orderN + 1
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
 				1 - (embedding <=> $1::vector) AS score
 			FROM memory_chunks
 			WHERE agent_id = $2 AND embedding IS NOT NULL
-			AND user_id IS NULL%s
-			ORDER BY embedding <=> $%d::vector LIMIT $%d`, tc, orderN, limitN)
-		args = append([]any{vecStr, agentID}, tcArgs...)
+			%s%s
+			ORDER BY embedding <=> $%d::vector LIMIT $%d`, userSQL, tc, orderN, limitN)
+		args = append(core, tcArgs...)
 		args = append(args, vecStr, limit)
 	}
 
@@ -239,16 +334,24 @@ func hybridMerge(fts, vec []scoredChunk, textWeight, vectorWeight float64, curre
 			if scope == "personal" {
 				existing.Scope = "personal"
 				existing.Snippet = r.Text
+				if r.UserID != nil {
+					existing.ChunkUserID = *r.UserID
+				}
 			}
 		} else {
+			chunkUID := ""
+			if r.UserID != nil {
+				chunkUID = *r.UserID
+			}
 			seen[k] = &store.MemorySearchResult{
-				Path:      r.Path,
-				StartLine: r.StartLine,
-				EndLine:   r.EndLine,
-				Score:     score,
-				Snippet:   r.Text,
-				Source:    "memory",
-				Scope:     scope,
+				Path:        r.Path,
+				StartLine:   r.StartLine,
+				EndLine:     r.EndLine,
+				Score:       score,
+				Snippet:     r.Text,
+				Source:      "memory",
+				Scope:       scope,
+				ChunkUserID: chunkUID,
 			}
 		}
 	}

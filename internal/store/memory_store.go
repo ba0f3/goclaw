@@ -13,13 +13,14 @@ type DocumentInfo struct {
 
 // MemorySearchResult is a single result from memory search.
 type MemorySearchResult struct {
-	Path      string  `json:"path"`
-	StartLine int     `json:"start_line"`
-	EndLine   int     `json:"end_line"`
-	Score     float64 `json:"score"`
-	Snippet   string  `json:"snippet"`
-	Source    string  `json:"source"`
-	Scope     string  `json:"scope,omitempty"` // "global" or "personal"
+	Path         string  `json:"path"`
+	StartLine    int     `json:"start_line"`
+	EndLine      int     `json:"end_line"`
+	Score        float64 `json:"score"`
+	Snippet      string  `json:"snippet"`
+	Source       string  `json:"source"`
+	Scope        string  `json:"scope,omitempty"` // "global" or "personal"
+	ChunkUserID  string  `json:"chunk_user_id,omitempty"` // memory_chunks.user_id (for RAG path filtering)
 }
 
 // MemorySearchOptions configures a memory search query.
@@ -30,6 +31,13 @@ type MemorySearchOptions struct {
 	PathPrefix   string
 	VectorWeight float64 // per-agent override (0 = use store default)
 	TextWeight   float64 // per-agent override (0 = use store default)
+	// RAGGroupID is the current chat's group scope (e.g. telegram:group:-100). Empty for DM / WS direct.
+	// When set, rag/group/{RAGGroupID}/... is visible to all participants; rag/dm/... only if chunk owner matches querier.
+	RAGGroupID string
+	// RAGPersonalOwnerID is the real sender identity in group chats (e.g. Telegram numeric user id).
+	// Memory rows for rag/dm/ are keyed by that id from DM uploads; group-scoped UserID does not match.
+	// When set with RAGGroupID, search includes rag/dm/ chunks owned by this id.
+	RAGPersonalOwnerID string
 }
 
 // EmbeddingProvider generates vector embeddings for text.
@@ -66,6 +74,10 @@ type MemoryStore interface {
 	GetDocument(ctx context.Context, agentID, userID, path string) (string, error)
 	PutDocument(ctx context.Context, agentID, userID, path, content string) error
 	DeleteDocument(ctx context.Context, agentID, userID, path string) error
+	// DeleteDocumentsByPathPrefix removes all documents (and chunks, via FK) whose path starts with prefix for the agent.
+	DeleteDocumentsByPathPrefix(ctx context.Context, agentID, prefix string) error
+	// DeleteDocumentsByPathPrefixAndUser removes documents for one owner whose path starts with prefix.
+	DeleteDocumentsByPathPrefixAndUser(ctx context.Context, agentID, userID, prefix string) error
 	ListDocuments(ctx context.Context, agentID, userID string) ([]DocumentInfo, error)
 
 	// Admin queries

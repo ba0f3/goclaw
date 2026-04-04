@@ -87,6 +87,9 @@ const MemoryPage = lazyWithRetry(() =>
 const KnowledgeGraphPage = lazyWithRetry(() =>
   import("@/pages/knowledge-graph/knowledge-graph-page").then((m) => ({ default: m.KnowledgeGraphPage })),
 );
+const RagPage = lazyWithRetry(() =>
+  import("@/pages/rag/rag-page").then((m) => ({ default: m.RagPage })),
+);
 const ContactsPage = lazyWithRetry(() =>
   import("@/pages/contacts/contacts-page").then((m) => ({ default: m.ContactsPage })),
 );
@@ -194,6 +197,7 @@ export function AppRoutes() {
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
           <Route path={ROUTES.MEMORY} element={<MemoryPage />} />
           <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<KnowledgeGraphPage />} />
+          <Route path={ROUTES.RAG_INDEXING} element={<RagPage />} />
         </Route>
 
         {/* Catch-all → overview */}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -18,14 +19,24 @@ func (s *SQLiteMemoryStore) Search(ctx context.Context, query string, agentID, u
 		maxResults = s.cfg.MaxResults
 	}
 
-	results, err := s.likeSearch(ctx, query, agentID, userID, maxResults*2)
+	ragGroupPrefix := rag.GroupDocumentPathPrefix(opts.RAGGroupID)
+	results, err := s.likeSearch(ctx, query, agentID, userID, ragGroupPrefix, opts.RAGPersonalOwnerID, maxResults*2)
 	if err != nil {
 		return nil, err
 	}
 
+	sharedMem := store.IsSharedMemory(ctx)
+
 	// Apply filters and cap results
 	var filtered []store.MemorySearchResult
 	for _, r := range results {
+		var cu *string
+		if r.ChunkUserID != "" {
+			cu = &r.ChunkUserID
+		}
+		if !rag.VisibleRAGMemoryChunk(r.Path, cu, userID, opts.RAGGroupID, opts.RAGPersonalOwnerID, sharedMem) {
+			continue
+		}
 		if opts.MinScore > 0 && r.Score < opts.MinScore {
 			continue
 		}
@@ -42,7 +53,7 @@ func (s *SQLiteMemoryStore) Search(ctx context.Context, query string, agentID, u
 
 // likeSearch performs a case-insensitive LIKE search across chunk text.
 // Returns results scored 1.0 (global) or 1.2 (personal, boosted).
-func (s *SQLiteMemoryStore) likeSearch(ctx context.Context, query, agentID, userID string, limit int) ([]store.MemorySearchResult, error) {
+func (s *SQLiteMemoryStore) likeSearch(ctx context.Context, query, agentID, userID, ragGroupPrefix, ragPersonalOwnerID string, limit int) ([]store.MemorySearchResult, error) {
 	pattern := "%" + escapeLike(query) + "%"
 
 	var q string
@@ -53,26 +64,70 @@ func (s *SQLiteMemoryStore) likeSearch(ctx context.Context, query, agentID, user
 		if err != nil {
 			return nil, err
 		}
-		q = `SELECT path, start_line, end_line, text, user_id
+		if ragGroupPrefix != "" {
+			pathPat := escapeLike(ragGroupPrefix) + "%"
+			if ragPersonalOwnerID != "" {
+				q = `SELECT path, start_line, end_line, text, user_id
+			 FROM memory_chunks
+			 WHERE agent_id = ? AND (
+				user_id IS NULL OR user_id = ?
+				OR path LIKE ? ESCAPE '\'
+				OR (user_id = ? AND path LIKE 'rag/dm/%' ESCAPE '\')
+			 )
+			 AND text LIKE ? ESCAPE '\'` + tc + `
+			 ORDER BY user_id DESC
+			 LIMIT ?`
+				args = append([]any{agentID, userID, pathPat, ragPersonalOwnerID, pattern}, tcArgs...)
+				args = append(args, limit)
+			} else {
+				q = `SELECT path, start_line, end_line, text, user_id
+			 FROM memory_chunks
+			 WHERE agent_id = ? AND (
+				user_id IS NULL OR user_id = ?
+				OR path LIKE ? ESCAPE '\'
+			 )
+			 AND text LIKE ? ESCAPE '\'` + tc + `
+			 ORDER BY user_id DESC
+			 LIMIT ?`
+				args = append([]any{agentID, userID, pathPat, pattern}, tcArgs...)
+				args = append(args, limit)
+			}
+		} else {
+			q = `SELECT path, start_line, end_line, text, user_id
 			 FROM memory_chunks
 			 WHERE agent_id = ? AND (user_id IS NULL OR user_id = ?)
 			 AND text LIKE ? ESCAPE '\'` + tc + `
 			 ORDER BY user_id DESC
 			 LIMIT ?`
-		args = append([]any{agentID, userID, pattern}, tcArgs...)
-		args = append(args, limit)
+			args = append([]any{agentID, userID, pattern}, tcArgs...)
+			args = append(args, limit)
+		}
 	} else {
 		tc, tcArgs, err := scopeClause(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = `SELECT path, start_line, end_line, text, user_id
+		if ragGroupPrefix != "" {
+			pathPat := escapeLike(ragGroupPrefix) + "%"
+			q = `SELECT path, start_line, end_line, text, user_id
+			 FROM memory_chunks
+			 WHERE agent_id = ? AND (
+				user_id IS NULL
+				OR path LIKE ? ESCAPE '\'
+			 )
+			 AND text LIKE ? ESCAPE '\'` + tc + `
+			 LIMIT ?`
+			args = append([]any{agentID, pathPat, pattern}, tcArgs...)
+			args = append(args, limit)
+		} else {
+			q = `SELECT path, start_line, end_line, text, user_id
 			 FROM memory_chunks
 			 WHERE agent_id = ? AND user_id IS NULL
 			 AND text LIKE ? ESCAPE '\'` + tc + `
 			 LIMIT ?`
-		args = append([]any{agentID, pattern}, tcArgs...)
-		args = append(args, limit)
+			args = append([]any{agentID, pattern}, tcArgs...)
+			args = append(args, limit)
+		}
 	}
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -95,14 +150,19 @@ func (s *SQLiteMemoryStore) likeSearch(ctx context.Context, query, agentID, user
 			scope = "personal"
 			score = 1.2 // personal boost, mirrors PG hybrid merge
 		}
+		chunkUID := ""
+		if uid != nil {
+			chunkUID = *uid
+		}
 		results = append(results, store.MemorySearchResult{
-			Path:      path,
-			StartLine: startLine,
-			EndLine:   endLine,
-			Score:     score,
-			Snippet:   text,
-			Source:    "memory",
-			Scope:     scope,
+			Path:        path,
+			StartLine:   startLine,
+			EndLine:     endLine,
+			Score:       score,
+			Snippet:     text,
+			Source:      "memory",
+			Scope:       scope,
+			ChunkUserID: chunkUID,
 		})
 	}
 	if err := rows.Err(); err != nil {

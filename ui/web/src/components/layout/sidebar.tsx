@@ -23,6 +23,7 @@ import {
   Inbox,
   Brain,
   Network,
+  FileSearch,
   Contact,
   KeyRound,
   Building2,
@@ -111,6 +112,7 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
         <SidebarGroup label={t("groups.data")} collapsed={collapsed}>
           <SidebarItem to={ROUTES.MEMORY} icon={Brain} label={t("nav.memory")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.KNOWLEDGE_GRAPH} icon={Network} label={t("nav.knowledgeGraph")} collapsed={collapsed} />
+          <SidebarItem to={ROUTES.RAG_INDEXING} icon={FileSearch} label={t("nav.ragIndexing")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.STORAGE} icon={HardDrive} label={t("nav.storage")} collapsed={collapsed} />
         </SidebarGroup>
 

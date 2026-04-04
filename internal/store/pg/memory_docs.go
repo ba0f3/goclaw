@@ -145,6 +145,35 @@ func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, pat
 	return nil
 }
 
+func (s *PGMemoryStore) DeleteDocumentsByPathPrefix(ctx context.Context, agentID, prefix string) error {
+	aid := mustParseUUID(agentID)
+	tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
+	if tcErr != nil {
+		return tcErr
+	}
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM memory_documents WHERE agent_id = $1 AND position($2 in path) = 1"+tc,
+		append([]any{aid, prefix}, tcArgs...)...,
+	)
+	return err
+}
+
+func (s *PGMemoryStore) DeleteDocumentsByPathPrefixAndUser(ctx context.Context, agentID, userID, prefix string) error {
+	if userID == "" || prefix == "" {
+		return nil
+	}
+	aid := mustParseUUID(agentID)
+	tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
+	if tcErr != nil {
+		return tcErr
+	}
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM memory_documents WHERE agent_id = $1 AND user_id = $2 AND position($3 in path) = 1"+tc,
+		append([]any{aid, userID, prefix}, tcArgs...)...,
+	)
+	return err
+}
+
 func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID string) ([]store.DocumentInfo, error) {
 	aid := mustParseUUID(agentID)
 

@@ -100,6 +100,7 @@ type Loop struct {
 	skillsLoader   *skills.Loader
 	skillAllowList []string // nil = all, [] = none, ["x","y"] = filter
 	hasMemory      bool
+	ragIndexing    store.RAGIndexingConfig
 	contextFiles   []bootstrap.ContextFile
 
 	// Per-user profile + file seeding + dynamic context loading
@@ -241,6 +242,7 @@ type LoopConfig struct {
 	SkillsLoader   *skills.Loader
 	SkillAllowList []string // nil = all, [] = none, ["x","y"] = filter
 	HasMemory      bool
+	RAGIndexing    store.RAGIndexingConfig
 	ContextFiles   []bootstrap.ContextFile
 
 	// Compaction config
@@ -384,6 +386,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillsLoader:           cfg.SkillsLoader,
 		skillAllowList:         cfg.SkillAllowList,
 		hasMemory:              cfg.HasMemory,
+		ragIndexing:            cfg.RAGIndexing,
 		contextFiles:           cfg.ContextFiles,
 		ensureUserProfile:      cfg.EnsureUserProfile,
 		seedUserFiles:          cfg.SeedUserFiles,

@@ -1,0 +1,174 @@
+package rag
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// ErrUnsupportedType means the extension has no extractor or missing system deps.
+var ErrUnsupportedType = errors.New("rag: unsupported file type for extraction")
+
+const extractDeadline = 30 * time.Second
+
+const maxExtractedChars = 200_000
+
+// ExtractText reads textual content from a local file path using format-specific backends.
+// ctx should carry a deadline (e.g. 30s). The path must reference a readable file.
+func ExtractText(ctx context.Context, filePath string) (string, error) {
+	if filePath == "" {
+		return "", fmt.Errorf("rag: empty path")
+	}
+	abs, err := filepath.Abs(filePath)
+	if err != nil {
+		return "", err
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return "", err
+	}
+	if fi.IsDir() {
+		return "", fmt.Errorf("rag: path is a directory")
+	}
+
+	ext := NormalizeExt(filepath.Ext(abs))
+	switch ext {
+	case ".md", ".txt", ".csv":
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			return "", err
+		}
+		return truncateForLLM(string(data)), nil
+	case ".pdf":
+		if out, err := runPythonPDF(ctx, abs); err == nil && strings.TrimSpace(out) != "" {
+			return truncateForLLM(out), nil
+		}
+		out, err := runPythonPDFPlumber(ctx, abs)
+		if err != nil {
+			return "", err
+		}
+		return truncateForLLM(out), nil
+	case ".docx", ".odt", ".epub":
+		out, err := runPandocPlain(ctx, abs)
+		if err != nil {
+			return "", err
+		}
+		return truncateForLLM(out), nil
+	case ".xlsx":
+		out, err := runPythonOpenpyxl(ctx, abs)
+		if err != nil {
+			return "", err
+		}
+		return truncateForLLM(out), nil
+	case ".pptx":
+		out, err := runPythonPPTX(ctx, abs)
+		if err != nil {
+			return "", err
+		}
+		return truncateForLLM(out), nil
+	default:
+		return "", ErrUnsupportedType
+	}
+}
+
+func truncateForLLM(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= maxExtractedChars {
+		return s
+	}
+	return s[:maxExtractedChars] + "\n... [truncated]"
+}
+
+func runWithDeadline(parent context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := parent.Deadline(); ok {
+		return parent, func() {}
+	}
+	return context.WithTimeout(parent, extractDeadline)
+}
+
+func runPython(ctx context.Context, script string, path string) (string, error) {
+	ctx, cancel := runWithDeadline(ctx)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "python3", "-c", script, path)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("python extract: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+func runPythonPDF(ctx context.Context, path string) (string, error) {
+	const script = `
+import sys
+from pypdf import PdfReader
+path = sys.argv[1]
+r = PdfReader(path)
+for p in r.pages:
+	t = p.extract_text() or ""
+	print(t)
+`
+	return runPython(ctx, script, path)
+}
+
+func runPythonPDFPlumber(ctx context.Context, path string) (string, error) {
+	const script = `
+import sys
+import pdfplumber
+path = sys.argv[1]
+with pdfplumber.open(path) as pdf:
+	for page in pdf.pages:
+		t = page.extract_text() or ""
+		print(t)
+`
+	return runPython(ctx, script, path)
+}
+
+func runPandocPlain(ctx context.Context, path string) (string, error) {
+	ctx, cancel := runWithDeadline(ctx)
+	defer cancel()
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "pandoc", path, "-t", "plain")
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("pandoc: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+func runPythonOpenpyxl(ctx context.Context, path string) (string, error) {
+	const script = `
+import sys
+import openpyxl
+path = sys.argv[1]
+wb = openpyxl.load_workbook(path, read_only=True)
+for ws in wb.worksheets:
+	for row in ws.iter_rows(values_only=True):
+		cells = [str(c) for c in row if c is not None]
+		if cells:
+			print("\t".join(cells))
+`
+	return runPython(ctx, script, path)
+}
+
+func runPythonPPTX(ctx context.Context, path string) (string, error) {
+	const script = `
+import sys
+from pptx import Presentation
+path = sys.argv[1]
+p = Presentation(path)
+for slide in p.slides:
+	for shape in slide.shapes:
+		if getattr(shape, "has_text_frame", False) and shape.has_text_frame:
+			print(shape.text_frame.text)
+`
+	return runPython(ctx, script, path)
+}

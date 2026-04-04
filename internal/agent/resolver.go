@@ -383,6 +383,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SkillsLoader:           deps.Skills,
 			SkillAllowList:         skillAllowList,
 			HasMemory:              hasMemory,
+			RAGIndexing:            ag.ParseRAGIndexingConfig(),
 			ContextFiles:           contextFiles,
 			EnsureUserProfile:      deps.EnsureUserProfile,
 			SeedUserFiles:          deps.SeedUserFiles,
