@@ -9,7 +9,7 @@
   "embedding": {
     "title": "Embedding",
     "description": "Provider and model for vector embedding and semantic search.",
-    "importance": "Embedding is critical for memory recall, skill search, knowledge graph, and task matching accuracy. Changes affect the entire system.",
+    "importance": "Embedding is critical for memory recall, skill search, knowledge graph, RAG attachment indexing, and task matching accuracy. Changes affect the entire system.",
     "provider": "Embedding Provider",
     "model": "Embedding Model",
     "providerTip": "LLM provider used for generating text embeddings.",

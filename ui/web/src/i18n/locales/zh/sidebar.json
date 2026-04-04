@@ -24,6 +24,7 @@
     "mcpServers": "MCP 服务器",
     "memory": "记忆",
     "knowledgeGraph": "Knowledge Graph",
+    "ragIndexing": "RAG 索引",
     "nodes": "Nodes",
     "overview": "概览",
     "pendingMessages": "待处理消息",

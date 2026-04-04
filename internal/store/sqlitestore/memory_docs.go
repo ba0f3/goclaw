@@ -96,6 +96,33 @@ func (s *SQLiteMemoryStore) DeleteDocument(ctx context.Context, agentID, userID,
 	return nil
 }
 
+func (s *SQLiteMemoryStore) DeleteDocumentsByPathPrefix(ctx context.Context, agentID, prefix string) error {
+	tc, tcArgs, tcErr := scopeClause(ctx)
+	if tcErr != nil {
+		return tcErr
+	}
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM memory_documents WHERE agent_id = ? AND substr(path, 1, length(?)) = ?"+tc,
+		append([]any{agentID, prefix, prefix}, tcArgs...)...,
+	)
+	return err
+}
+
+func (s *SQLiteMemoryStore) DeleteDocumentsByPathPrefixAndUser(ctx context.Context, agentID, userID, prefix string) error {
+	if userID == "" || prefix == "" {
+		return nil
+	}
+	tc, tcArgs, tcErr := scopeClause(ctx)
+	if tcErr != nil {
+		return tcErr
+	}
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM memory_documents WHERE agent_id = ? AND user_id = ? AND substr(path, 1, length(?)) = ?"+tc,
+		append([]any{agentID, userID, prefix, prefix}, tcArgs...)...,
+	)
+	return err
+}
+
 func (s *SQLiteMemoryStore) ListDocuments(ctx context.Context, agentID, userID string) ([]store.DocumentInfo, error) {
 	var rows *sql.Rows
 	var err error

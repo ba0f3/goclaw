@@ -3,12 +3,16 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -16,12 +20,33 @@ import (
 // SessionsMethods handles sessions.list, sessions.preview, sessions.patch, sessions.delete, sessions.reset.
 type SessionsMethods struct {
 	sessions store.SessionStore
+	memory   store.MemoryStore // optional; used to purge RAG session attachment docs
 	eventBus bus.EventPublisher
 	cfg      *config.Config
 }
 
-func NewSessionsMethods(sess store.SessionStore, eventBus bus.EventPublisher, cfg *config.Config) *SessionsMethods {
-	return &SessionsMethods{sessions: sess, eventBus: eventBus, cfg: cfg}
+func NewSessionsMethods(sess store.SessionStore, mem store.MemoryStore, eventBus bus.EventPublisher, cfg *config.Config) *SessionsMethods {
+	return &SessionsMethods{sessions: sess, memory: mem, eventBus: eventBus, cfg: cfg}
+}
+
+func (m *SessionsMethods) purgeSessionRAGDocs(ctx context.Context, sessionKey string) {
+	if m.memory == nil || sessionKey == "" {
+		return
+	}
+	sess := m.sessions.Get(ctx, sessionKey)
+	if sess == nil || sess.AgentUUID == uuid.Nil {
+		return
+	}
+	agentStr := sess.AgentUUID.String()
+	legacyPrefix := "sessions/" + sessionKey + "/"
+	if err := m.memory.DeleteDocumentsByPathPrefix(ctx, agentStr, legacyPrefix); err != nil {
+		slog.Warn("sessions.rag_docs_cleanup_failed", "key", sessionKey, "error", err)
+	}
+	scope := rag.ParseScope(sessionKey, sess.UserID)
+	ragPrefix := scope.PathPrefix()
+	if err := m.memory.DeleteDocumentsByPathPrefixAndUser(ctx, agentStr, scope.OwnerID, ragPrefix); err != nil {
+		slog.Warn("sessions.rag_scoped_cleanup_failed", "key", sessionKey, "error", err)
+	}
 }
 
 func (m *SessionsMethods) Register(router *gateway.MethodRouter) {
@@ -192,6 +217,8 @@ func (m *SessionsMethods) handleDelete(ctx context.Context, client *gateway.Clie
 		}
 	}
 
+	m.purgeSessionRAGDocs(ctx, params.Key)
+
 	if err := m.sessions.Delete(ctx, params.Key); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
@@ -222,6 +249,8 @@ func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Clien
 			return
 		}
 	}
+
+	m.purgeSessionRAGDocs(ctx, params.Key)
 
 	m.sessions.Reset(ctx, params.Key)
 

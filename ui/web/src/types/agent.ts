@@ -76,6 +76,24 @@ export interface WorkspaceSharingConfig {
   share_memory?: boolean;
 }
 
+/** other_config.rag_indexing — off unless enabled is explicitly true; server fills supported_types after dependency check */
+export interface RAGIndexingConfig {
+  enabled?: boolean;
+  supported_types?: string[];
+}
+
+export interface RAGDepsResponse {
+  supported: string[];
+  unsupported: string[];
+  warnings: string[];
+}
+
+export interface AgentUpdateResponse {
+  saved?: boolean;
+  ok?: string;
+  rag_deps?: RAGDepsResponse;
+}
+
 export type ChatGPTOAuthRoutingStrategy =
   | "manual"
   | "primary_first"
