@@ -30,14 +30,13 @@ import {
   normalizeChatGPTOAuthRouting,
 } from "./agent-display-utils";
 import { buildDraftRouting } from "./codex-pool-routing-draft-utils";
-
 const SIMPLE_REASONING_LEVELS = new Set(["off", "low", "medium", "high"]);
 
 interface AgentAdvancedDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agent: AgentData;
-  onUpdate: (updates: Record<string, unknown>) => Promise<void>;
+  onUpdate: (updates: Record<string, unknown>) => Promise<AgentUpdateResponse | undefined>;
 }
 
 export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: AgentAdvancedDialogProps) {
@@ -109,7 +108,6 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const [prune, setPrune] = useState<ContextPruningConfig>(init.prune);
   const [sbEnabled, setSbEnabled] = useState(init.sbEnabled);
   const [sb, setSb] = useState<SandboxConfig>(init.sb);
-
   // Re-sync local state when dialog opens (picks up latest agent data from React Query)
   useEffect(() => {
     if (!open) return;

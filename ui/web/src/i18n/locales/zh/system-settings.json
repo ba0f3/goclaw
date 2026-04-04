@@ -9,7 +9,7 @@
   "embedding": {
     "title": "Embedding",
     "description": "用于向量嵌入和语义搜索的Provider和模型。",
-    "importance": "Embedding对记忆检索、技能搜索、知识图谱和任务匹配至关重要。更改将影响整个系统。",
+    "importance": "Embedding对记忆检索、技能搜索、知识图谱、RAG 附件索引和任务匹配至关重要。更改将影响整个系统。",
     "provider": "Embedding Provider",
     "model": "Embedding模型",
     "providerTip": "用于生成文本嵌入的LLM Provider。",

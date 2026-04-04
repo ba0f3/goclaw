@@ -37,6 +37,35 @@ func (m *mockMemoryStore) PutDocument(_ context.Context, agentID, userID, path, 
 	return nil
 }
 
+func (m *mockMemoryStore) DeleteDocumentsByPathPrefix(_ context.Context, agentID, prefix string) error {
+	for k := range m.docs {
+		parts := strings.SplitN(k, "|", 3)
+		if len(parts) != 3 || parts[0] != agentID {
+			continue
+		}
+		if strings.HasPrefix(parts[2], prefix) {
+			delete(m.docs, k)
+		}
+	}
+	return nil
+}
+
+func (m *mockMemoryStore) DeleteDocumentsByPathPrefixAndUser(_ context.Context, agentID, userID, prefix string) error {
+	if userID == "" {
+		return nil
+	}
+	for k := range m.docs {
+		parts := strings.SplitN(k, "|", 3)
+		if len(parts) != 3 || parts[0] != agentID || parts[1] != userID {
+			continue
+		}
+		if strings.HasPrefix(parts[2], prefix) {
+			delete(m.docs, k)
+		}
+	}
+	return nil
+}
+
 func (m *mockMemoryStore) DeleteDocument(_ context.Context, agentID, userID, path string) error {
 	delete(m.docs, docKey(agentID, userID, path))
 	return nil

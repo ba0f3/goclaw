@@ -36,6 +36,7 @@ export const ROUTES = {
   PENDING_MESSAGES: "/pending-messages",
   MEMORY: "/memory",
   KNOWLEDGE_GRAPH: "/knowledge-graph",
+  RAG_INDEXING: "/rag-indexing",
   ACTIVITY: "/activity",
   API_KEYS: "/api-keys",
   PACKAGES: "/packages",

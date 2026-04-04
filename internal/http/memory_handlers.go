@@ -166,10 +166,11 @@ func (h *MemoryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	agentID := r.PathValue("agentID")
 
 	var body struct {
-		Query      string  `json:"query"`
-		UserID     string  `json:"user_id"`
-		MaxResults int     `json:"max_results"`
-		MinScore   float64 `json:"min_score"`
+		Query       string  `json:"query"`
+		UserID      string  `json:"user_id"`
+		MaxResults  int     `json:"max_results"`
+		MinScore    float64 `json:"min_score"`
+		RAGGroupID  string  `json:"rag_group_id,omitempty"` // optional: telegram:group:-100 for rag/ visibility
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
@@ -183,6 +184,7 @@ func (h *MemoryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	results, err := h.store.Search(r.Context(), body.Query, agentID, body.UserID, store.MemorySearchOptions{
 		MaxResults: body.MaxResults,
 		MinScore:   body.MinScore,
+		RAGGroupID: body.RAGGroupID,
 	})
 	if err != nil {
 		slog.Warn("memory.search failed", "error", err)
