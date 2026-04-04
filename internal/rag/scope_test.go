@@ -31,3 +31,26 @@ func TestParseScope_GroupTopic(t *testing.T) {
 		t.Fatalf("GroupID = %q, want %q", got, want)
 	}
 }
+
+func TestParseScope_WSDirect(t *testing.T) {
+	s := ParseScope("agent:fox:ws:direct:conv123", "ws:user:1")
+	if s.GroupID != "" {
+		t.Fatalf("GroupID = %q, want empty", s.GroupID)
+	}
+	if s.OwnerID != "ws:user:1" {
+		t.Fatalf("OwnerID = %q, want ws:user:1", s.OwnerID)
+	}
+	if got, want := s.MemoryPath("x.txt"), "rag/dm/x.txt"; got != want {
+		t.Fatalf("MemoryPath = %q, want %q", got, want)
+	}
+}
+
+func TestParseScope_MalformedKeyFallsBackToDM(t *testing.T) {
+	s := ParseScope("not-a-session-key", "u1")
+	if s.GroupID != "" {
+		t.Fatalf("GroupID = %q, want empty", s.GroupID)
+	}
+	if s.OwnerID != "u1" {
+		t.Fatalf("OwnerID = %q, want u1", s.OwnerID)
+	}
+}

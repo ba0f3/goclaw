@@ -132,6 +132,8 @@ export function RagPage() {
       }
       await refreshRagDeps();
       toast.success(t("installHint"));
+    } catch (err) {
+      toast.error(t("installMissing"), userFriendlyError(err));
     } finally {
       setInstallingRagPkgs(false);
     }
@@ -149,15 +151,47 @@ export function RagPage() {
     }
     setSaving(true);
     try {
-      let lastRagDeps: RAGDepsResponse | undefined;
-      for (const a of targets) {
-        const res = await http.put<AgentUpdateResponse>(`/v1/agents/${a.id}`, {
-          other_config: buildOtherConfigWithRag(a, ragIndexingEnabled),
-        });
-        if (res?.rag_deps) lastRagDeps = res.rag_deps;
-      }
+      const settled = await Promise.allSettled(
+        targets.map(async (a) => {
+          const res = await http.put<AgentUpdateResponse>(`/v1/agents/${a.id}`, {
+            other_config: buildOtherConfigWithRag(a, ragIndexingEnabled),
+          });
+          return { agent: a, res };
+        }),
+      );
+
+      const successes: Array<{ agent: AgentData; res: AgentUpdateResponse }> = [];
+      const failures: Array<{ agent: AgentData; error: unknown }> = [];
+      settled.forEach((s, i) => {
+        const agent = targets[i];
+        if (!agent) return;
+        if (s.status === "fulfilled") {
+          successes.push(s.value);
+        } else {
+          failures.push({ agent, error: s.reason });
+        }
+      });
+
+      // Best-effort refresh.
+      const lastRagDeps = successes.map((s) => s.res?.rag_deps).filter(Boolean).at(-1) as RAGDepsResponse | undefined;
       if (lastRagDeps) setRagLiveDeps(lastRagDeps);
+
       await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all });
+
+      if (failures.length > 0) {
+        const names = failures
+          .map((f) => f.agent.display_name || f.agent.agent_key || f.agent.id)
+          .filter(Boolean)
+          .slice(0, 3)
+          .join(", ");
+        const more = failures.length > 3 ? ` +${failures.length - 3}` : "";
+        toast.error(
+          t("saveFailed"),
+          `${successes.length}/${targets.length} updated. Failed: ${names}${more}. ${userFriendlyError(failures[0]!.error)}`,
+        );
+        return;
+      }
+
       if (selectedAgentIds.length === 0) {
         toast.success(t("savedAll", { count: targets.length }));
       } else if (targets.length === 1 && targets[0]) {
@@ -166,8 +200,10 @@ export function RagPage() {
       } else {
         toast.success(t("savedMany", { count: targets.length }));
       }
+
       setScopeMixed(false);
     } catch (err) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all });
       toast.error(t("saveFailed"), userFriendlyError(err));
     } finally {
       setSaving(false);

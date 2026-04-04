@@ -87,7 +87,7 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents", h.authMiddleware(h.handleList))
 	mux.HandleFunc("POST /v1/agents", h.adminMiddleware(h.handleCreate))
 	// Static path before /v1/agents/{id} so "rag-deps" is not captured as an agent id.
-	mux.HandleFunc("GET /v1/agents/rag-deps", h.authMiddleware(h.handleRAGDeps))
+	mux.HandleFunc("GET /v1/agents/rag-deps", h.adminMiddleware(h.handleRAGDeps))
 	mux.HandleFunc("GET /v1/agents/{id}", h.authMiddleware(h.handleGet))
 	mux.HandleFunc("PUT /v1/agents/{id}", h.adminMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/agents/{id}", h.adminMiddleware(h.handleDelete))

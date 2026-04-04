@@ -197,7 +197,7 @@ export function AppRoutes() {
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
           <Route path={ROUTES.MEMORY} element={<MemoryPage />} />
           <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<KnowledgeGraphPage />} />
-          <Route path={ROUTES.RAG_INDEXING} element={<RagPage />} />
+          <Route path={ROUTES.RAG_INDEXING} element={<RequireAdmin><RagPage /></RequireAdmin>} />
         </Route>
 
         {/* Catch-all → overview */}

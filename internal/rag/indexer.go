@@ -13,6 +13,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// Limit concurrent attachment indexing to avoid unbounded goroutine spikes.
+// Indexing may call chunking + embeddings; keep this conservative.
+var indexAttachmentSem = make(chan struct{}, 8)
+
 // IndexAttachmentParams carries everything needed to persist RAG chunks asynchronously.
 type IndexAttachmentParams struct {
 	Ctx         context.Context
@@ -61,6 +65,8 @@ func IndexAttachmentAsync(p IndexAttachmentParams) {
 	bg := context.WithoutCancel(p.Ctx)
 
 	go func() {
+		indexAttachmentSem <- struct{}{}
+		defer func() { <-indexAttachmentSem }()
 		defer safego.Recover(nil, "component", "rag_index_attachment", "session", p.SessionKey)
 		if err := Index(bg, scope, agentStr, base, p.Text, p.Memory); err != nil {
 			slog.Warn("rag.index.failed", "path", scope.MemoryPath(base), "error", err)

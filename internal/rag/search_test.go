@@ -8,6 +8,12 @@ func TestVisibleRAGMemoryChunk_NonRAG(t *testing.T) {
 	}
 }
 
+func TestVisibleRAGMemoryChunk_SharedMemoryBypassesRAGRules(t *testing.T) {
+	if !VisibleRAGMemoryChunk("rag/dm/x.pdf", strPtr("someone"), "", "", "", true) {
+		t.Fatal("shared memory should bypass RAG rules")
+	}
+}
+
 func TestVisibleRAGMemoryChunk_GroupShared(t *testing.T) {
 	path := "rag/group/telegram:group:-100/a.pdf"
 	if !VisibleRAGMemoryChunk(path, strPtr("telegram:1"), "telegram:2", "telegram:group:-100", "", false) {
