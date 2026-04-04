@@ -10,7 +10,35 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
+
+const maxRAGDocumentBytes = tools.MaxFileSizeBytes
+
+func isPathWithinDir(path string, dir string) bool {
+	if path == "" || dir == "" {
+		return false
+	}
+	cleanPath := filepath.Clean(path)
+	cleanDir := filepath.Clean(dir)
+	if cleanPath == cleanDir {
+		return true
+	}
+	// Ensure we don't treat "/a/b2" as within "/a/b".
+	return strings.HasPrefix(cleanPath, cleanDir+string(filepath.Separator))
+}
+
+func isSafeUploadPath(path string, workspace string) bool {
+	uploadsDir := filepath.Join(workspace, ".uploads")
+	if !isPathWithinDir(path, uploadsDir) {
+		return false
+	}
+	// Refuse to follow symlinks to unexpected locations.
+	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	return true
+}
 
 // ragDocumentPlaceholderNames returns candidate file names that may appear in the channel
 // placeholder "[File: NAME — use read_document ...]". Persisted paths use uuid basenames while
@@ -94,10 +122,23 @@ func (l *Loop) applyRAGAttachmentExtraction(ctx context.Context, req *RunRequest
 	}
 	content := messages[idx].Content
 	memUser := store.MemoryUserID(ctx)
+	workspace := tools.ToolWorkspaceFromCtx(ctx)
+	if workspace == "" {
+		slog.Warn("rag: no workspace in context, skipping extraction/indexing")
+		return
+	}
 	changed := false
 
 	for _, ref := range mediaRefs {
 		if ref.Kind != "document" || ref.Path == "" {
+			continue
+		}
+		if !isSafeUploadPath(ref.Path, workspace) {
+			slog.Warn("rag: unsafe document path, skipping", "path", ref.Path)
+			continue
+		}
+		if fi, err := os.Stat(ref.Path); err == nil && fi.Size() > maxRAGDocumentBytes {
+			slog.Warn("rag: document too large, skipping", "path", ref.Path, "bytes", fi.Size(), "max_bytes", maxRAGDocumentBytes)
 			continue
 		}
 		ext := strings.ToLower(filepath.Ext(ref.Path))
@@ -115,7 +156,7 @@ func (l *Loop) applyRAGAttachmentExtraction(ctx context.Context, req *RunRequest
 			if !strings.Contains(content, hint) {
 				continue
 			}
-			text, err := rag.ExtractText(ctx, ref.Path)
+			text, err := rag.ExtractTextFromWorkspace(ctx, workspace, ref.Path)
 			if err != nil {
 				slog.Warn("rag.extract_failed", "file", name, "error", err)
 				break

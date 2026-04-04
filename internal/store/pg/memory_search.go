@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -101,6 +102,8 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 	var args []any
 
 	if store.IsSharedMemory(ctx) {
+		// Param map:
+		// $1=query, $2=agentID, $3=query, $4..=tenant scope, LIMIT=$last
 		// Shared: no user_id filter — search ALL chunks for agent
 		tc, tcArgs, _, err := scopeClause(ctx, 4)
 		if err != nil {
@@ -120,6 +123,8 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		tcStart := 5
 		if ragGroupPrefix != "" {
 			if ragPersonalOwnerID != "" {
+				// Param map:
+				// $1=query, $2=agentID, $3=query, $4=userID, $5=ragGroupPrefix, $6=ragPersonalOwnerID, $7..=tenant scope, LIMIT=$last
 				userSQL = `AND (
 				user_id IS NULL OR user_id = $4
 				OR position($5 in path) = 1
@@ -128,6 +133,8 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 				core = []any{query, agentID, query, userID, ragGroupPrefix, ragPersonalOwnerID}
 				tcStart = 7
 			} else {
+				// Param map:
+				// $1=query, $2=agentID, $3=query, $4=userID, $5=ragGroupPrefix, $6..=tenant scope, LIMIT=$last
 				userSQL = `AND (
 				user_id IS NULL OR user_id = $4
 				OR position($5 in path) = 1
@@ -136,6 +143,8 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 				tcStart = 6
 			}
 		} else {
+			// Param map:
+			// $1=query, $2=agentID, $3=query, $4=userID, $5..=tenant scope, LIMIT=$last
 			userSQL = `AND (user_id IS NULL OR user_id = $4)`
 			core = []any{query, agentID, query, userID}
 			tcStart = 5
@@ -158,6 +167,8 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		var core []any
 		tcStart := 4
 		if ragGroupPrefix != "" {
+			// Param map:
+			// $1=query, $2=agentID, $3=query, $4=ragGroupPrefix, $5..=tenant scope, LIMIT=$last
 			userSQL = `AND (
 				user_id IS NULL
 				OR position($4 in path) = 1
@@ -165,6 +176,8 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 			core = []any{query, agentID, query, ragGroupPrefix}
 			tcStart = 5
 		} else {
+			// Param map:
+			// $1=query, $2=agentID, $3=query, $4..=tenant scope, LIMIT=$last
 			userSQL = `AND user_id IS NULL`
 			core = []any{query, agentID, query}
 			tcStart = 4
@@ -193,8 +206,13 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 	var results []scoredChunk
 	for rows.Next() {
 		var r scoredChunk
-		rows.Scan(&r.Path, &r.StartLine, &r.EndLine, &r.Text, &r.UserID, &r.Score)
+		if err := rows.Scan(&r.Path, &r.StartLine, &r.EndLine, &r.Text, &r.UserID, &r.Score); err != nil {
+			return nil, err
+		}
 		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return results, nil
 }
@@ -206,6 +224,8 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 	var args []any
 
 	if store.IsSharedMemory(ctx) {
+		// Param map:
+		// $1=vec, $2=agentID, $3..=tenant scope, ORDER=$last-1, LIMIT=$last
 		// Shared: no user_id filter — search ALL chunks for agent
 		tc, tcArgs, _, err := scopeClause(ctx, 3)
 		if err != nil {
@@ -226,6 +246,8 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 		tcStart := 4
 		if ragGroupPrefix != "" {
 			if ragPersonalOwnerID != "" {
+				// Param map:
+				// $1=vec, $2=agentID, $3=userID, $4=ragGroupPrefix, $5=ragPersonalOwnerID, $6..=tenant scope, ORDER=$last-1, LIMIT=$last
 				userSQL = `AND (
 				user_id IS NULL OR user_id = $3
 				OR position($4 in path) = 1
@@ -234,6 +256,8 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 				core = []any{vecStr, agentID, userID, ragGroupPrefix, ragPersonalOwnerID}
 				tcStart = 6
 			} else {
+				// Param map:
+				// $1=vec, $2=agentID, $3=userID, $4=ragGroupPrefix, $5..=tenant scope, ORDER=$last-1, LIMIT=$last
 				userSQL = `AND (
 				user_id IS NULL OR user_id = $3
 				OR position($4 in path) = 1
@@ -242,6 +266,8 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 				tcStart = 5
 			}
 		} else {
+			// Param map:
+			// $1=vec, $2=agentID, $3=userID, $4..=tenant scope, ORDER=$last-1, LIMIT=$last
 			userSQL = `AND (user_id IS NULL OR user_id = $3)`
 			core = []any{vecStr, agentID, userID}
 			tcStart = 4
@@ -265,6 +291,8 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 		var core []any
 		tcStart := 3
 		if ragGroupPrefix != "" {
+			// Param map:
+			// $1=vec, $2=agentID, $3=ragGroupPrefix, $4..=tenant scope, ORDER=$last-1, LIMIT=$last
 			userSQL = `AND (
 				user_id IS NULL
 				OR position($3 in path) = 1
@@ -272,6 +300,8 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 			core = []any{vecStr, agentID, ragGroupPrefix}
 			tcStart = 4
 		} else {
+			// Param map:
+			// $1=vec, $2=agentID, $3..=tenant scope, ORDER=$last-1, LIMIT=$last
 			userSQL = `AND user_id IS NULL`
 			core = []any{vecStr, agentID}
 			tcStart = 3
@@ -301,8 +331,13 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 	var results []scoredChunk
 	for rows.Next() {
 		var r scoredChunk
-		rows.Scan(&r.Path, &r.StartLine, &r.EndLine, &r.Text, &r.UserID, &r.Score)
+		if err := rows.Scan(&r.Path, &r.StartLine, &r.EndLine, &r.Text, &r.UserID, &r.Score); err != nil {
+			return nil, err
+		}
 		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return results, nil
 }
@@ -379,5 +414,32 @@ func hybridMerge(fts, vec []scoredChunk, textWeight, vectorWeight float64, curre
 	}
 
 	return results
+}
+
+func TestHybridMerge_DedupPrefersPersonal(t *testing.T) {
+	fts := []scoredChunk{
+		{Path: "MEMORY.md", StartLine: 1, EndLine: 2, Text: "g", Score: 1.0, UserID: nil},
+	}
+	u := "u1"
+	vec := []scoredChunk{
+		{Path: "MEMORY.md", StartLine: 1, EndLine: 2, Text: "p", Score: 1.0, UserID: &u},
+	}
+	got := hybridMerge(fts, vec, 1.0, 1.0, u)
+	if len(got) != 1 {
+		t.Fatalf("len=%d, want 1", len(got))
+	}
+	if got[0].Scope != "personal" {
+		t.Fatalf("Scope=%q, want personal", got[0].Scope)
+	}
+	if got[0].Snippet != "p" {
+		t.Fatalf("Snippet=%q, want p", got[0].Snippet)
+	}
+	if got[0].ChunkUserID != u {
+		t.Fatalf("ChunkUserID=%q, want %q", got[0].ChunkUserID, u)
+	}
+	// Score = global(1*1*1.0) + personal(1*1*1.2) = 2.2
+	if got[0].Score < 2.19 || got[0].Score > 2.21 {
+		t.Fatalf("Score=%f, want ~2.2", got[0].Score)
+	}
 }
 
