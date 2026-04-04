@@ -136,6 +136,110 @@ func TestBuildRequestBody_TemperatureDependsOnModelNotAPIBase(t *testing.T) {
 	}
 }
 
+func TestBuildRequestBody_ReasoningEffortOpenAIOnly(t *testing.T) {
+	thinkOpts := map[string]any{OptThinkingLevel: "medium"}
+
+	t.Run("Together Qwen omits reasoning_effort", func(t *testing.T) {
+		p := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
+		req := ChatRequest{
+			Messages: []Message{{Role: "user", Content: "hi"}},
+			Options:  thinkOpts,
+		}
+		body := p.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, false)
+		if _, ok := body[OptReasoningEffort]; ok {
+			t.Fatalf("Qwen on Together must not send %q (HTTP 400 on unknown fields), body=%v", OptReasoningEffort, body)
+		}
+	})
+
+	t.Run("OpenAI gpt-5 keeps reasoning_effort", func(t *testing.T) {
+		p := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "gpt-5")
+		req := ChatRequest{
+			Messages: []Message{{Role: "user", Content: "hi"}},
+			Options:  thinkOpts,
+		}
+		body := p.buildRequestBody("gpt-5.4", req, false)
+		if got, ok := body[OptReasoningEffort].(string); !ok || got != "medium" {
+			t.Fatalf("gpt-5.4 should send reasoning_effort medium, got body=%v", body)
+		}
+	})
+
+	t.Run("OpenAI o3-mini keeps reasoning_effort", func(t *testing.T) {
+		p := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "")
+		req := ChatRequest{
+			Messages: []Message{{Role: "user", Content: "hi"}},
+			Options:  thinkOpts,
+		}
+		body := p.buildRequestBody("o3-mini", req, false)
+		if got, ok := body[OptReasoningEffort].(string); !ok || got != "medium" {
+			t.Fatalf("o3-mini should send reasoning_effort medium, got body=%v", body)
+		}
+	})
+}
+
+func TestBuildRequestBody_TogetherOmitsStreamOptions(t *testing.T) {
+	together := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
+	openai := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "gpt-4")
+
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	}
+
+	gotTogether := together.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, true)
+	if _, ok := gotTogether["stream_options"]; ok {
+		t.Fatalf("Together streaming must omit stream_options, got %v", gotTogether["stream_options"])
+	}
+
+	gotOpenAI := openai.buildRequestBody("gpt-4o", req, true)
+	if _, ok := gotOpenAI["stream_options"]; !ok {
+		t.Fatal("OpenAI streaming should include stream_options for usage")
+	}
+}
+
+func TestBuildRequestBody_TogetherOmitsStrayDashScopeKeys(t *testing.T) {
+	p := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Options: map[string]any{
+			OptEnableThinking: true,
+			OptThinkingBudget: 4096,
+		},
+	}
+	body := p.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, false)
+	if _, ok := body[OptEnableThinking]; ok {
+		t.Fatalf("Together must not send %q", OptEnableThinking)
+	}
+	if _, ok := body[OptThinkingBudget]; ok {
+		t.Fatalf("Together must not send %q", OptThinkingBudget)
+	}
+}
+
+func TestBuildRequestBody_MultimodalTextBeforeImages(t *testing.T) {
+	p := NewOpenAIProvider("test", "key", "https://api.openai.com/v1", "gpt-4")
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: "describe",
+				Images: []ImageContent{
+					{MimeType: "image/jpeg", Data: "qq=="},
+				},
+			},
+		},
+	}
+	body := p.buildRequestBody("gpt-4o", req, false)
+	msgs := body["messages"].([]map[string]any)
+	parts, ok := msgs[0]["content"].([]map[string]any)
+	if !ok || len(parts) < 2 {
+		t.Fatalf("want multimodal parts, got %v", msgs[0]["content"])
+	}
+	if typ, _ := parts[0]["type"].(string); typ != "text" {
+		t.Fatalf("first part should be text, got type=%q parts=%v", typ, parts)
+	}
+	if typ, _ := parts[1]["type"].(string); typ != "image_url" {
+		t.Fatalf("second part should be image_url, got type=%q", typ)
+	}
+}
+
 func TestBuildRequestBody_PrefixedModelsUseCorrectTokenField(t *testing.T) {
 	p := NewOpenAIProvider("test", "key", "https://api.openai.com/v1", "gpt-4")
 

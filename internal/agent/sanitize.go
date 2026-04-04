@@ -172,11 +172,12 @@ func stripDowngradedToolCallText(content string) string {
 //         <antThinking>...</antThinking>
 // Go regexp doesn't support backreferences, so we use separate patterns.
 var thinkingTagPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?is)<think>.*?</think>`),
-	regexp.MustCompile(`(?is)<thinking>.*?</thinking>`),
-	regexp.MustCompile(`(?is)<thought>.*?</thought>`),
-	regexp.MustCompile(`(?is)<antThinking>.*?</antThinking>`),
-	regexp.MustCompile(`(?is)<antthinking>.*?</antthinking>`),
+	regexp.MustCompile(`(?is)<redacted_thinking\b[^>]*>.*?</redacted_thinking\s*>`),
+	regexp.MustCompile(`(?is)<thinking\b[^>]*>.*?</thinking\s*>`),
+	regexp.MustCompile(`(?is)<think\b[^>]*>.*?</think\s*>`),
+	regexp.MustCompile(`(?is)<thought\b[^>]*>.*?</thought\s*>`),
+	regexp.MustCompile(`(?is)<antThinking\b[^>]*>.*?</antThinking\s*>`),
+	regexp.MustCompile(`(?is)<antthinking\b[^>]*>.*?</antthinking\s*>`),
 }
 
 func stripThinkingTags(content string) string {
