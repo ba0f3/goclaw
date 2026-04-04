@@ -4,12 +4,12 @@ import "testing"
 
 func TestDocumentNameFromMediaTagByPath(t *testing.T) {
 	refPath := "/workspace/.uploads/36a44897-39ef-4ae3-82b7-c7168c738210.pdf"
-	content := `<media:document name="DigitalOcean Invoice 2026 Mar (110277-541870709).pdf" path="` + refPath + `">` +
-		"\n\n[File: DigitalOcean Invoice 2026 Mar (110277-541870709).pdf — use read_document tool to analyze this file]"
+	display := "Example Vendor Statement Mar (REF-00000000).pdf"
+	content := `<media:document name="` + display + `" path="` + refPath + `">` +
+		"\n\n[File: " + display + " — use read_document tool to analyze this file]"
 	got := documentNameFromMediaTagByPath(content, refPath)
-	want := "DigitalOcean Invoice 2026 Mar (110277-541870709).pdf"
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
+	if got != display {
+		t.Fatalf("got %q, want %q", got, display)
 	}
 }
 

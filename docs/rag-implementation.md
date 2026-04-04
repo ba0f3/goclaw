@@ -37,14 +37,17 @@ flowchart TB
   end
   subgraph loop["Agent loop"]
     EM["enrichInputMedia: persist docs, paths, MediaRef for read_document"]
-    DEC{"rag_indexing enabled and extension supported?"}
-    RAG["applyRAGAttachmentExtraction: ExtractText, replace placeholder, queue index"]
+    DEC{"rag_indexing enabled and extension supported&quest;"}
+    RAG["applyRAGAttachmentExtraction"]
+    Q{"per attachment: extract or inline read OK&quest;"}
+    RAGOK["replace placeholder if matched; queue IndexAttachmentAsync"]
+    RAGFAIL["keep placeholder; warn log; skip rag&sol; index for that ref"]
     NORAG["RAG off: skip extraction and indexing; user message keeps channel placeholder"]
     LLM["Provider turn"]
   end
-  subgraph index["Async index only when RAG ran"]
+  subgraph index["Async index only on success path"]
     IDX["IndexAttachmentAsync goroutine"]
-    MEM["memory_documents + memory_chunks under rag/..."]
+    MEM["memory_documents + memory_chunks under rag&sol;..."]
   end
   subgraph search["Later turns"]
     MS["memory_search tool"]
@@ -52,10 +55,14 @@ flowchart TB
   end
   CH --> GW --> EM --> DEC
   DEC -->|no| NORAG --> LLM
-  DEC -->|yes| RAG --> LLM
-  RAG --> IDX --> MEM
+  DEC -->|yes| RAG --> Q
+  Q -->|yes| RAGOK --> LLM
+  Q -->|no| RAGFAIL --> LLM
+  RAGOK --> IDX --> MEM
   MEM --> MS --> VIS
 ```
+
+The **per attachment** diamond summarizes each supported document ref: placeholder path uses `ExtractText`; plain-text formats (`.md`, `.txt`, `.csv`) may still index via direct read when no placeholder matched. Details and log keys: **When extraction fails** below.
 
 `memory_search` still works for normal memory files (`MEMORY.md`, `memory/*.md`, etc.) when RAG is disabled; only **new** attachment chunks under `rag/` are absent for those turns.
 
@@ -93,6 +100,22 @@ If that placeholder appears in the **last user message** content and the ref mat
 ### Inline text attachments
 
 For `.md`, `.txt`, `.csv`, if there was no placeholder match, the loop may read the file and index it without changing visible content (index-only path).
+
+### When extraction fails
+
+Failure handling is **non-fatal** for the turn: documents are already persisted and `read_document` refs are on context (`enrichInputMedia`), so the model can still open the file via the tool even if RAG extraction does not run.
+
+| Situation | User-visible message | `rag/...` indexing | Log |
+|-----------|----------------------|--------------------|-----|
+| **`rag.ExtractTextFromWorkspace` fails** while matching a `read_document` placeholder (PDF/Office deps missing, timeout, unreadable file, path/symlink checks, etc.) | Placeholder **unchanged** (hint to use `read_document` remains) | **Not** scheduled from this path | `slog.Warn("rag.extract_failed", "file", name, "error", err)` |
+| **`.md` / `.txt` / `.csv`** after no placeholder replacement (`replaced` still false) | Unchanged (index-only path does not inject a block when there was no placeholder match) | **`IndexAttachmentAsync`** runs only if **`os.ReadFile`** succeeds and trimmed text is non-empty | On read error: `slog.Warn("rag.read_text_attachment", ...)`; empty body skips indexing silently |
+| Document **skipped earlier** (no workspace, unsafe path, over `maxRAGDocumentBytes`, extension not in `supported_types`) | Unchanged | No | `slog.Warn` with reason (`rag: no workspace…`, `unsafe document path`, `document too large`, etc.) |
+
+Notes:
+
+- For **binary-like** attachments (e.g. `.pdf`), a failed extract means **no** placeholder swap and **no** RAG index for that file on that turn — recovery is **`read_document`** (or fixing host deps / file).
+- For **text** formats, if extraction fails on the placeholder path but a later **direct read** in the index-only branch succeeds, **indexing can still occur** without replacing the placeholder (unusual; e.g. timeout during extract vs. quick read).
+- **`IndexAttachmentAsync`** does not block the agent loop. Background failures are **`slog.Warn` only** (e.g. `rag.index.failed`, `rag.index.skip_no_owner`); they are not surfaced to the end user.
 
 ### Async indexing
 
