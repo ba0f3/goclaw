@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type {
-  AgentData, ChatGPTOAuthRoutingConfig, CompactionConfig, ContextPruningConfig,
+  AgentData, AgentUpdateResponse, ChatGPTOAuthRoutingConfig, CompactionConfig, ContextPruningConfig,
   ReasoningOverrideMode,
   SandboxConfig, WorkspaceSharingConfig,
 } from "@/types/agent";

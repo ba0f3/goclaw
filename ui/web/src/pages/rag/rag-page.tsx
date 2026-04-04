@@ -173,7 +173,8 @@ export function RagPage() {
       });
 
       // Best-effort refresh.
-      const lastRagDeps = successes.map((s) => s.res?.rag_deps).filter(Boolean).at(-1) as RAGDepsResponse | undefined;
+      const ragDepsList = successes.map((s) => s.res?.rag_deps).filter(Boolean) as RAGDepsResponse[];
+      const lastRagDeps = ragDepsList.length > 0 ? ragDepsList[ragDepsList.length - 1] : undefined;
       if (lastRagDeps) setRagLiveDeps(lastRagDeps);
 
       await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all });
