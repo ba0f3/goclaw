@@ -168,7 +168,7 @@ func runGateway() {
 	loadBootstrapFiles(pgStores, workspace, agentCfg)
 
 	// Subagent system
-	subagentMgr := setupSubagents(providerRegistry, cfg, msgBus, toolsReg, workspace, sandboxMgr)
+	subagentMgr := setupSubagents(providerRegistry, cfg, msgBus, toolsReg, workspace, dataDir, sandboxMgr)
 	if subagentMgr != nil {
 		// Wire announce queue for batched subagent result delivery (matching TS debounce pattern)
 		announceQueue := tools.NewAnnounceQueue(1000, 20,
@@ -298,7 +298,20 @@ func runGateway() {
 			pa.AllowPaths(filepath.Join(dataDir, "tenants"))
 		}
 	}
-
+	if execTool, ok := toolsReg.Get("exec"); ok {
+		if pa, ok := execTool.(tools.PathAllowable); ok {
+			pa.AllowPaths(globalSkillsDir)
+			if homeDir != "" {
+				pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
+			}
+			pa.AllowPaths(filepath.Join(dataDir, "cli-workspaces"))
+			if pgStores.Skills != nil {
+				pa.AllowPaths(pgStores.Skills.Dirs()...)
+			}
+			pa.AllowPaths(builtinSkillsDir)
+			pa.AllowPaths(filepath.Join(dataDir, "tenants"))
+		}
+	}
 	// Memory tools are PG-backed; always available.
 	hasMemory := true
 

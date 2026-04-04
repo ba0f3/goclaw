@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -156,7 +158,7 @@ func buildEmbeddingProvider(
 	return nil
 }
 
-func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager) *tools.SubagentManager {
+func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, dataDir string, sandboxMgr sandbox.Manager) *tools.SubagentManager {
 	names := providerReg.List(context.Background())
 	if len(names) == 0 {
 		return nil
@@ -208,6 +210,21 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 			reg.Register(tools.NewWriteFileTool(workspace, agentCfg.RestrictToWorkspace))
 			reg.Register(tools.NewListFilesTool(workspace, agentCfg.RestrictToWorkspace))
 			reg.Register(tools.NewExecTool(workspace, agentCfg.RestrictToWorkspace))
+		}
+		homeDir, _ := os.UserHomeDir()
+		if execTool, ok := reg.Get("exec"); ok {
+			if pa, ok := execTool.(tools.PathAllowable); ok {
+				pa.AllowPaths(filepath.Join(dataDir, "skills"))
+				pa.AllowPaths(filepath.Join(dataDir, "cli-workspaces"))
+				pa.AllowPaths(filepath.Join(dataDir, "tenants"))
+				pa.AllowPaths("/app/bundled-skills")
+				if homeDir != "" {
+					pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
+				}
+				if pgSkills, ok := reg.Get("skill_search"); ok && pgSkills != nil {
+					_ = pgSkills
+				}
+			}
 		}
 		return reg
 	}

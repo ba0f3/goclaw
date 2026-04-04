@@ -33,6 +33,7 @@ type ExecTool struct {
 	workspace       string
 	timeout          time.Duration
 	pathDenyPatterns []*regexp.Regexp     // always-on path-based denials (DenyPaths)
+	allowedPrefixes  []string             // extra allowed path prefixes (e.g. skills dirs)
 	denyExemptions   []string             // substrings that exempt a command from deny
 	restrict         bool
 	sandboxMgr       sandbox.Manager      // nil = no sandbox, execute on host
@@ -75,6 +76,12 @@ func (t *ExecTool) DenyPaths(paths ...string) {
 // AllowPathExemptions adds substrings that exempt a command from deny pattern matches.
 func (t *ExecTool) AllowPathExemptions(substrings ...string) {
 	t.denyExemptions = append(t.denyExemptions, substrings...)
+}
+
+// AllowPaths adds extra path prefixes that exec is allowed to access
+// when workspace restriction is enabled (e.g. skills directories).
+func (t *ExecTool) AllowPaths(prefixes ...string) {
+	t.allowedPrefixes = append(t.allowedPrefixes, prefixes...)
 }
 
 // SetApprovalManager sets the exec approval manager for this tool.
@@ -183,6 +190,11 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 				cwd = wd
 			}
 		}
+		if effectiveRestrict(ctx, t.restrict) {
+			if err := t.validateCredentialedArgsPaths(ctx, cmdArgs, cwd); err != nil {
+				return ErrorResult(err.Error())
+			}
+		}
 		sandboxKey := ToolSandboxKeyFromCtx(ctx)
 		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey)
 	}
@@ -226,6 +238,11 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			cwd = resolved
 		} else {
 			cwd = wd
+		}
+	}
+	if effectiveRestrict(ctx, t.restrict) {
+		if err := t.validateExecCommandPaths(ctx, command, cwd); err != nil {
+			return ErrorResult(err.Error())
 		}
 	}
 

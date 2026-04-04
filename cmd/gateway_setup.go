@@ -250,9 +250,25 @@ func setupToolRegistry(
 		"goclaw.db", "goclaw.db-wal", "goclaw.db-shm",
 		"memory/", "delegate/",
 	}
+	// exec: extra allowed prefixes must match read_file allowlist in runGateway().
+	homeDir, _ := os.UserHomeDir()
+	extraAllowedPaths := []string{
+		filepath.Join(dataDir, "skills"),
+		filepath.Join(dataDir, "cli-workspaces"),
+		filepath.Join(dataDir, "tenants"),
+		"/app/bundled-skills",
+	}
+	if homeDir != "" {
+		extraAllowedPaths = append(extraAllowedPaths, filepath.Join(homeDir, ".agents", "skills"))
+	}
 	if rf, ok := toolsReg.Get("read_file"); ok {
 		if t, ok := rf.(*tools.ReadFileTool); ok {
 			t.DenyPaths(readFileDenyPaths...)
+		}
+	}
+	if ex, ok := toolsReg.Get("exec"); ok {
+		if pa, ok := ex.(tools.PathAllowable); ok {
+			pa.AllowPaths(extraAllowedPaths...)
 		}
 	}
 	if wf, ok := toolsReg.Get("write_file"); ok {
