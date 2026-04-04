@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -52,6 +53,7 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		return
 	}
 
+	var ragDeps map[string]any
 	if m.agentStore != nil {
 		// --- DB-backed: update agent in store ---
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
@@ -113,7 +115,19 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			updates["context_pruning"] = []byte(params.ContextPruning)
 		}
 		if len(params.OtherConfig) > 0 {
-			updates["other_config"] = []byte(params.OtherConfig)
+			enriched, deps, err := rag.EnrichOtherConfigWithRAG([]byte(params.OtherConfig))
+			if err != nil {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+				return
+			}
+			if deps != nil {
+				ragDeps = deps.MarshalForAPI()
+			}
+			out := []byte(params.OtherConfig)
+			if enriched != nil {
+				out = enriched
+			}
+			updates["other_config"] = out
 		}
 
 		if len(updates) > 0 {
@@ -181,9 +195,14 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		m.agents.InvalidateAgent(ag.ID.String())
 	}
 
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+	resp := map[string]any{
 		"ok":      true,
+		"saved":   true,
 		"agentId": params.AgentID,
-	}))
+	}
+	if ragDeps != nil {
+		resp["rag_deps"] = ragDeps
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, resp))
 	emitAudit(m.eventBus, client, "agent.updated", "agent", params.AgentID)
 }

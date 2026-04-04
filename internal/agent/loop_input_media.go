@@ -85,6 +85,7 @@ func (l *Loop) enrichInputMedia(ctx context.Context, req *RunRequest, messages [
 		// Enrich the last user message with persisted file paths so skills can access
 		// documents via exec (e.g. pypdf). Only for current-turn refs (just persisted).
 		l.enrichDocumentPaths(messages, mediaRefs)
+		l.applyRAGAttachmentExtraction(ctx, req, messages, mediaRefs)
 	}
 
 	// 2c. Collect audio MediaRefs (historical + current) for read_audio tool.

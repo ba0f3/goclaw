@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -78,10 +79,25 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult("memory system not available")
 	}
 
-	userID := store.MemoryUserID(ctx)
+	// Use the same identity for SQL row scope and RAG group context. MemoryUserID is empty in some
+	// channels (e.g. Telegram group) while UserIDFromContext still holds the sender — without this
+	// fallback, DM-indexed rag/dm/ chunks (user_id set) are excluded when searching from a group.
+	searchUserID := store.MemoryUserID(ctx)
+	if searchUserID == "" && !store.IsSharedMemory(ctx) {
+		searchUserID = store.UserIDFromContext(ctx)
+	}
 	searchOpts := store.MemorySearchOptions{
 		MaxResults: maxResults,
 		MinScore:   minScore,
+		RAGGroupID: rag.ParseScope(ToolSessionKeyFromCtx(ctx), searchUserID).GroupID,
+	}
+	if searchOpts.RAGGroupID != "" {
+		if sid := store.SenderIDFromContext(ctx); sid != "" {
+			if i := strings.IndexByte(sid, '|'); i > 0 {
+				sid = sid[:i]
+			}
+			searchOpts.RAGPersonalOwnerID = strings.TrimSpace(sid)
+		}
 	}
 	// Apply per-agent memory config overrides if set
 	if mc := MemoryConfigFromCtx(ctx); mc != nil {
@@ -99,15 +115,16 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 		}
 	}
 	agentStr := agentID.String()
-	results, err := t.memStore.Search(ctx, query, agentStr, userID, searchOpts)
+	results, err := t.memStore.Search(ctx, query, agentStr, searchUserID, searchOpts)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("memory search failed: %v", err))
 	}
 	// Fallback: also search leader's memory for team members and merge results.
 	if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" && leaderID != agentStr {
-		leaderResults, lerr := t.memStore.Search(ctx, query, leaderID, userID, searchOpts)
-		if lerr != nil && userID != "" {
-			leaderResults, _ = t.memStore.Search(ctx, query, leaderID, "", searchOpts)
+		leaderOpts := searchOpts
+		leaderResults, lerr := t.memStore.Search(ctx, query, leaderID, searchUserID, leaderOpts)
+		if lerr != nil && searchUserID != "" {
+			leaderResults, _ = t.memStore.Search(ctx, query, leaderID, "", leaderOpts)
 		}
 		results = append(results, leaderResults...)
 	}

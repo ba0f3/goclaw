@@ -17,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/rag"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -85,6 +86,8 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Agent CRUD (reads: viewer+, writes: admin+)
 	mux.HandleFunc("GET /v1/agents", h.authMiddleware(h.handleList))
 	mux.HandleFunc("POST /v1/agents", h.adminMiddleware(h.handleCreate))
+	// Static path before /v1/agents/{id} so "rag-deps" is not captured as an agent id.
+	mux.HandleFunc("GET /v1/agents/rag-deps", h.adminMiddleware(h.handleRAGDeps))
 	mux.HandleFunc("GET /v1/agents/{id}", h.authMiddleware(h.handleGet))
 	mux.HandleFunc("PUT /v1/agents/{id}", h.adminMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/agents/{id}", h.adminMiddleware(h.handleDelete))
@@ -124,6 +127,12 @@ func (h *AgentsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 func (h *AgentsHandler) adminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, next)
+}
+
+// handleRAGDeps returns live attachment extractor dependency status for the gateway host (viewer+).
+func (h *AgentsHandler) handleRAGDeps(w http.ResponseWriter, r *http.Request) {
+	rep := rag.CheckDeps()
+	writeJSON(w, http.StatusOK, rep.MarshalForAPI())
 }
 
 func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -329,13 +338,27 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	validationAgent := *ag
 	validationAgent.Provider = validationProvider
+	var ragDeps map[string]any
 	if otherConfig, ok := allowed["other_config"]; ok {
 		rawOtherConfig, err := marshalJSONRaw(otherConfig)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
 			return
 		}
-		validationAgent.OtherConfig = rawOtherConfig
+		enriched, deps, err := rag.EnrichOtherConfigWithRAG([]byte(rawOtherConfig))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
+			return
+		}
+		if deps != nil {
+			ragDeps = deps.MarshalForAPI()
+		}
+		if enriched != nil {
+			allowed["other_config"] = json.RawMessage(enriched)
+			validationAgent.OtherConfig = json.RawMessage(enriched)
+		} else {
+			validationAgent.OtherConfig = rawOtherConfig
+		}
 	}
 
 	if err := validateChatGPTOAuthAgentRouting(
@@ -378,7 +401,11 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	emitAudit(h.msgBus, r, "agent.updated", "agent", id.String())
-	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	resp := map[string]any{"saved": true, "ok": "true"}
+	if ragDeps != nil {
+		resp["rag_deps"] = ragDeps
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // syncIdentityName updates the Name: field in the agent's IDENTITY.md (agent-level and

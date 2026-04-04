@@ -23,6 +23,7 @@ import {
   Inbox,
   Brain,
   Network,
+  FileSearch,
   Contact,
   KeyRound,
   Building2,
@@ -130,6 +131,7 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
           <SidebarItem to={ROUTES.CLI_CREDENTIALS} icon={KeyRound} label={t("nav.cliCredentials")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.API_KEYS} icon={KeyRound} label={t("nav.apiKeys")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.PACKAGES} icon={Blocks} label={t("nav.packages")} collapsed={collapsed} />
+          <SidebarItem to={ROUTES.RAG_INDEXING} icon={FileSearch} label={t("nav.ragIndexing")} collapsed={collapsed} />
           {isOwner && (
             <SidebarItem to={ROUTES.CONFIG} icon={Settings} label={t("nav.config")} collapsed={collapsed} />
           )}

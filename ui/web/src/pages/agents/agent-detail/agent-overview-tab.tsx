@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
-  AgentData, MemoryConfig, SubagentsConfig, ToolPolicyConfig,
+  AgentData, AgentUpdateResponse, MemoryConfig, SubagentsConfig, ToolPolicyConfig,
 } from "@/types/agent";
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { PersonalitySection } from "./overview-sections/personality-section";
@@ -16,7 +16,7 @@ import type { UseAgentHeartbeatReturn } from "../hooks/use-agent-heartbeat";
 
 interface AgentOverviewTabProps {
   agent: AgentData;
-  onUpdate: (updates: Record<string, unknown>) => Promise<void>;
+  onUpdate: (updates: Record<string, unknown>) => Promise<AgentUpdateResponse | undefined>;
   heartbeat: UseAgentHeartbeatReturn;
   onManageCodexPool: () => void;
 }
