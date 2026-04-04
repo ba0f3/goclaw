@@ -343,6 +343,30 @@ func TestResolveEffectiveChatGPTOAuthRoutingKeepsProviderOwnedMembersForStrategy
 	}
 }
 
+func TestParseRAGIndexingConfigOptInExplicitTrue(t *testing.T) {
+	ag := &AgentData{OtherConfig: json.RawMessage(`{"rag_indexing":{"enabled":true,"supported_types":[".md"]}}`)}
+	got := ag.ParseRAGIndexingConfig()
+	if !got.Enabled || len(got.SupportedTypes) != 1 || got.SupportedTypes[0] != ".md" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
+func TestParseRAGIndexingConfigDisabledWhenEnabledKeyMissing(t *testing.T) {
+	ag := &AgentData{OtherConfig: json.RawMessage(`{"rag_indexing":{"supported_types":[".md",".pdf"]}}`)}
+	got := ag.ParseRAGIndexingConfig()
+	if got.Enabled {
+		t.Fatal("want disabled when enabled key missing")
+	}
+}
+
+func TestParseRAGIndexingConfigDisabledWhenEnabledFalse(t *testing.T) {
+	ag := &AgentData{OtherConfig: json.RawMessage(`{"rag_indexing":{"enabled":false,"supported_types":[".md"]}}`)}
+	got := ag.ParseRAGIndexingConfig()
+	if got.Enabled {
+		t.Fatal("want disabled")
+	}
+}
+
 func TestResolveEffectiveChatGPTOAuthRoutingIgnoresCustomMembersWhenProviderOwnsPool(t *testing.T) {
 	defaults := &ChatGPTOAuthRoutingConfig{
 		Strategy:           ChatGPTOAuthStrategyRoundRobin,

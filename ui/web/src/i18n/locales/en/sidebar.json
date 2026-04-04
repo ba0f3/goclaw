@@ -24,6 +24,7 @@
     "mcpServers": "MCP Servers",
     "memory": "Memory",
     "knowledgeGraph": "Knowledge Graph",
+    "ragIndexing": "RAG Indexing",
     "traces": "Traces",
     "realtimeEvents": "Realtime Events",
     "usage": "Usage",

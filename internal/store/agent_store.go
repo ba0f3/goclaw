@@ -288,6 +288,72 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 	return *cfg.SkillNudgeInterval
 }
 
+// RAGIndexingConfig controls automatic attachment text extraction and async memory indexing.
+// Disabled unless other_config sets rag_indexing.enabled to true (see ParseRAGIndexingConfig).
+type RAGIndexingConfig struct {
+	Enabled        bool     `json:"enabled"`
+	SupportedTypes []string `json:"supported_types,omitempty"`
+}
+
+// ParseRAGIndexingConfig reads rag_indexing from other_config JSONB.
+// RAG is opt-in: enabled must be explicitly true. Missing or false keeps indexing off
+// (even if supported_types is present from a prior save).
+func (a *AgentData) ParseRAGIndexingConfig() RAGIndexingConfig {
+	var z RAGIndexingConfig
+	if len(a.OtherConfig) == 0 {
+		return z
+	}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(a.OtherConfig, &raw) != nil {
+		return z
+	}
+	ri, ok := raw["rag_indexing"]
+	if !ok || len(ri) == 0 {
+		return z
+	}
+	var riKeys map[string]json.RawMessage
+	if json.Unmarshal(ri, &riKeys) != nil {
+		return z
+	}
+	enRaw, hasEnabled := riKeys["enabled"]
+	if !hasEnabled {
+		return z
+	}
+	var enabled bool
+	if json.Unmarshal(enRaw, &enabled) != nil || !enabled {
+		return z
+	}
+	if json.Unmarshal(ri, &z) != nil {
+		return RAGIndexingConfig{}
+	}
+	z.Enabled = true
+	return z
+}
+
+// SupportsExt reports whether ext (e.g. ".pdf" or "pdf") is listed for RAG extraction.
+func (c RAGIndexingConfig) SupportsExt(ext string) bool {
+	if !c.Enabled {
+		return false
+	}
+	e := strings.ToLower(strings.TrimSpace(ext))
+	if e == "" {
+		return false
+	}
+	if !strings.HasPrefix(e, ".") {
+		e = "." + e
+	}
+	for _, t := range c.SupportedTypes {
+		tt := strings.ToLower(strings.TrimSpace(t))
+		if !strings.HasPrefix(tt, ".") {
+			tt = "." + tt
+		}
+		if tt == e {
+			return true
+		}
+	}
+	return false
+}
+
 // normalizeReasoningEffort delegates to providers.NormalizeReasoningEffort (DRY).
 func normalizeReasoningEffort(value string) string {
 	return providers.NormalizeReasoningEffort(value)

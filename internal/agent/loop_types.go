@@ -100,6 +100,7 @@ type Loop struct {
 	skillsLoader   *skills.Loader
 	skillAllowList []string // nil = all, [] = none, ["x","y"] = filter
 	hasMemory      bool
+	ragIndexing    store.RAGIndexingConfig
 	contextFiles   []bootstrap.ContextFile
 
 	// Per-user profile + file seeding + dynamic context loading
@@ -158,6 +159,10 @@ type Loop struct {
 	// the agent to capture reusable patterns as skills via skill_manage.
 	skillEvolve        bool
 	skillNudgeInterval int // nudge every N tool calls (0 = disabled, 15 = default)
+
+	// isTeamLead indicates this agent is the lead of its primary team.
+	// Determines whether team context is injected for inbound (non-dispatch) sessions.
+	isTeamLead bool
 
 	// Config permission store for group file writer checks
 	configPermStore store.ConfigPermissionStore
@@ -237,6 +242,7 @@ type LoopConfig struct {
 	SkillsLoader   *skills.Loader
 	SkillAllowList []string // nil = all, [] = none, ["x","y"] = filter
 	HasMemory      bool
+	RAGIndexing    store.RAGIndexingConfig
 	ContextFiles   []bootstrap.ContextFile
 
 	// Compaction config
@@ -254,9 +260,10 @@ type LoopConfig struct {
 	ShellDenyGroups map[string]bool
 
 	// Agent UUID + tenant for context propagation to tools
-	AgentUUID uuid.UUID
-	TenantID  uuid.UUID // agent's owning tenant — injected into execution context
-	AgentType string    // "open" or "predefined"
+	AgentUUID  uuid.UUID
+	TenantID   uuid.UUID // agent's owning tenant — injected into execution context
+	AgentType  string    // "open" or "predefined"
+	IsTeamLead bool      // agent leads a team (from resolver detection)
 
 	// Per-user profile + file seeding + dynamic context loading
 	EnsureUserProfile EnsureUserProfileFunc // preferred: separate profile + workspace
@@ -379,6 +386,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillsLoader:           cfg.SkillsLoader,
 		skillAllowList:         cfg.SkillAllowList,
 		hasMemory:              cfg.HasMemory,
+		ragIndexing:            cfg.RAGIndexing,
 		contextFiles:           cfg.ContextFiles,
 		ensureUserProfile:      cfg.EnsureUserProfile,
 		seedUserFiles:          cfg.SeedUserFiles,
@@ -402,6 +410,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
+		isTeamLead:             cfg.IsTeamLead,
 		configPermStore:        cfg.ConfigPermStore,
 		teamStore:              cfg.TeamStore,
 		secureCLIStore:         cfg.SecureCLIStore,

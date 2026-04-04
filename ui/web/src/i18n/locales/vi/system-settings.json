@@ -9,7 +9,7 @@
   "embedding": {
     "title": "Embedding",
     "description": "Provider và model cho vector embedding và tìm kiếm ngữ nghĩa.",
-    "importance": "Embedding rất quan trọng cho khả năng nhớ, tìm kiếm kỹ năng, đồ thị tri thức và khớp tác vụ. Thay đổi ảnh hưởng toàn hệ thống.",
+    "importance": "Embedding rất quan trọng cho khả năng nhớ, tìm kiếm kỹ năng, đồ thị tri thức, lập chỉ mục tệp đính kèm RAG và khớp tác vụ. Thay đổi ảnh hưởng toàn hệ thống.",
     "provider": "Provider Embedding",
     "model": "Model Embedding",
     "providerTip": "Provider LLM dùng để tạo vector embedding.",
