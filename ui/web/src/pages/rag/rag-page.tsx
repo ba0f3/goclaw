@@ -11,6 +11,7 @@ import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
 import { userFriendlyError } from "@/lib/error-utils";
+import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
 import type { AgentData, RAGDepsResponse, RAGIndexingConfig, AgentUpdateResponse } from "@/types/agent";
 import { RagIndexingPanel, pkgsForRagUnsupported } from "./rag-indexing-panel";
 import { RagAgentTags } from "./rag-agent-tags";
@@ -37,8 +38,9 @@ export function RagPage() {
   const queryClient = useQueryClient();
   const { agents, loading: agentsLoading } = useAgents();
 
-  /** Empty = all agents (default). Non-empty = only listed agent IDs. */
+  /** Empty = all agents (default). Non-empty = only listed agent IDs. Persisted in localStorage. */
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [ragScopeHydrated, setRagScopeHydrated] = useState(false);
   const [ragIndexingEnabled, setRagIndexingEnabled] = useState(false);
   const [ragLiveDeps, setRagLiveDeps] = useState<RAGDepsResponse | null>(null);
   const [ragProbeLoading, setRagProbeLoading] = useState(false);
@@ -59,15 +61,42 @@ export function RagPage() {
     [scopedAgents],
   );
 
-  // Drop stale IDs when agent list changes (skip while list empty / loading)
+  // Restore agent scope from localStorage once the agent list is available (empty stored = all agents).
   useEffect(() => {
-    if (agents.length === 0) return;
+    if (agents.length === 0 || ragScopeHydrated) return;
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEYS.RAG_SELECTED_AGENT_IDS);
+      if (raw != null) {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
+          const valid = new Set(agents.map((a) => a.id));
+          setSelectedAgentIds(parsed.filter((id) => valid.has(id)));
+        }
+      }
+    } catch {
+      // ignore corrupt storage
+    }
+    setRagScopeHydrated(true);
+  }, [agents, ragScopeHydrated]);
+
+  // Drop stale IDs when agent list changes. Wait until scope is hydrated so we do not overwrite localStorage restore.
+  useEffect(() => {
+    if (agents.length === 0 || !ragScopeHydrated) return;
     const valid = new Set(agents.map((a) => a.id));
     setSelectedAgentIds((prev) => {
       const filtered = prev.filter((id) => valid.has(id));
       return filtered.length === prev.length ? prev : filtered;
     });
-  }, [agents]);
+  }, [agents, ragScopeHydrated]);
+
+  useEffect(() => {
+    if (!ragScopeHydrated) return;
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.RAG_SELECTED_AGENT_IDS, JSON.stringify(selectedAgentIds));
+    } catch {
+      // ignore quota / private mode
+    }
+  }, [selectedAgentIds, ragScopeHydrated]);
 
   const syncEnabledFromScope = useCallback(() => {
     if (scopedAgents.length === 0) {
