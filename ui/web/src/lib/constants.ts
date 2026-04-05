@@ -18,6 +18,8 @@ export const LOCAL_STORAGE_KEYS = {
   SIDEBAR_COLLAPSED: "goclaw:sidebarCollapsed",
   LANGUAGE: "goclaw:language",
   TIMEZONE: "goclaw:timezone",
+  /** RAG settings page: subset of agent UUIDs to edit; empty array means "all agents". */
+  RAG_SELECTED_AGENT_IDS: "goclaw:rag_selected_agent_ids",
 } as const;
 
 export const SUPPORTED_LANGUAGES = ["en", "vi", "zh"] as const;
