@@ -135,7 +135,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 			}
 		}
 		promptWorkspace = tools.ResolveWorkspace(baseWs,
-			tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
+			tools.UserChatLayer(tools.WorkspaceUserSegment(userID), shared),
 		)
 	}
 

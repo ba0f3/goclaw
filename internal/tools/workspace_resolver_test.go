@@ -177,6 +177,23 @@ func TestResolveWorkspace_SharedTrue(t *testing.T) {
 	}
 }
 
+func TestWorkspaceUserSegment(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"group:telegram:-1003819627125", "-1003819627125"},
+		{"guild:9:user:1", "guild_9_user_1"},
+		{"user:telegram:12345", "user_telegram_12345"},
+	}
+	for _, tt := range tests {
+		got := WorkspaceUserSegment(tt.input)
+		if got != tt.want {
+			t.Errorf("WorkspaceUserSegment(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestSanitizePathSegment(t *testing.T) {
 	tests := []struct {
 		input string

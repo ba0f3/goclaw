@@ -11,6 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -18,15 +19,21 @@ import (
 // ConfigMethods handles config.get, config.apply, config.patch, config.schema.
 // Matching TS src/gateway/server-methods/config.ts.
 type ConfigMethods struct {
-	cfg          *config.Config
-	cfgPath      string
-	secretsStore store.ConfigSecretsStore
-	syncFn       func(ctx context.Context, cfg *config.Config) // nil-safe; syncs non-secret settings to system_configs
-	eventBus     bus.EventPublisher       // nil-safe; broadcasts config change events
+	cfg              *config.Config
+	cfgPath          string
+	secretsStore     store.ConfigSecretsStore
+	syncFn           func(ctx context.Context, cfg *config.Config) // nil-safe; syncs non-secret settings to system_configs
+	eventBus         bus.EventPublisher                            // nil-safe; broadcasts config change events
+	sandboxMgr       sandbox.Manager                               // optional; for config UI runtime flags
 }
 
 func NewConfigMethods(cfg *config.Config, cfgPath string, secretsStore store.ConfigSecretsStore, eventBus bus.EventPublisher) *ConfigMethods {
 	return &ConfigMethods{cfg: cfg, cfgPath: cfgPath, secretsStore: secretsStore, eventBus: eventBus}
+}
+
+// SetSandboxManager wires the live sandbox manager so config.get can expose bwrap/systemd capability flags.
+func (m *ConfigMethods) SetSandboxManager(mgr sandbox.Manager) {
+	m.sandboxMgr = mgr
 }
 
 // SetSystemConfigSync sets a callback to sync config to system_configs after save.
@@ -58,11 +65,15 @@ func (m *ConfigMethods) requireOwner(next gateway.MethodHandler) gateway.MethodH
 }
 
 func (m *ConfigMethods) handleGet(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+	payload := map[string]any{
 		"config": m.cfg.MaskedCopy(),
 		"hash":   m.cfg.Hash(),
 		"path":   m.cfgPath,
-	}))
+	}
+	if snap := sandbox.RuntimeUISnapshot(m.sandboxMgr); len(snap) > 0 {
+		payload["runtime"] = snap
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, payload))
 }
 
 // handleApply replaces the entire config with the provided JSON5 raw content.

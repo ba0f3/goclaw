@@ -53,17 +53,50 @@ func setupToolRegistry(
 	toolsReg = tools.NewRegistry()
 	agentCfg = cfg.ResolveAgent("default")
 
-	// Sandbox manager (optional — routes tools through Docker containers)
+	// Sandbox manager (optional — Docker and/or bubblewrap; Router picks backend per effective config)
 	if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil && sbCfg.Mode != "" && sbCfg.Mode != "off" {
-		if err := sandbox.CheckDockerAvailable(context.Background()); err != nil {
-			slog.Warn("sandbox disabled: Docker not available",
+		resolved := sbCfg.ToSandboxConfig()
+		bg := context.Background()
+		var dm *sandbox.DockerManager
+		if err := sandbox.CheckDockerAvailable(bg); err != nil {
+			slog.Debug("docker sandbox not available", "error", err)
+		} else {
+			dm = sandbox.NewDockerManager(resolved)
+		}
+		var bm *sandbox.BwrapManager
+		if err := sandbox.CheckBwrapAvailable(bg); err != nil {
+			slog.Debug("bwrap sandbox not available", "error", err)
+		} else {
+			bm = sandbox.NewBwrapManager(resolved)
+		}
+		primaryOK := false
+		switch resolved.Backend {
+		case sandbox.BackendBwrap:
+			primaryOK = bm != nil
+		default:
+			primaryOK = dm != nil
+		}
+		if !primaryOK {
+			slog.Warn("sandbox disabled: primary backend unavailable",
 				"configured_mode", sbCfg.Mode,
-				"error", err,
+				"backend", string(resolved.Backend),
+				"docker_ok", dm != nil,
+				"bwrap_ok", bm != nil,
 			)
 		} else {
-			resolved := sbCfg.ToSandboxConfig()
-			sandboxMgr = sandbox.NewDockerManager(resolved)
-			slog.Info("sandbox enabled", "mode", string(resolved.Mode), "image", resolved.Image, "scope", string(resolved.Scope))
+			sandboxMgr = sandbox.NewSandboxRouter(resolved, dm, bm)
+			infoArgs := []any{
+				"default_backend", string(resolved.Backend),
+				"docker", dm != nil,
+				"bwrap", bm != nil,
+				"mode", string(resolved.Mode),
+				"scope", string(resolved.Scope),
+				"image", resolved.Image,
+			}
+			if bm != nil {
+				infoArgs = append(infoArgs, "bwrap_resource_limits", bm.CgroupLimitsActive())
+			}
+			slog.Info("sandbox enabled", infoArgs...)
 		}
 	}
 

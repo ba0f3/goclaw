@@ -645,7 +645,10 @@
     },
     "sandbox": {
       "title": "Hộp cát",
-      "description": "Hộp cát Docker để cô lập thực thi code",
+      "description": "Cô lập thực thi code bằng Docker hoặc Bubblewrap",
+      "backend": "Backend",
+      "backendTip": "docker: container; bwrap: /usr/bin/bwrap trên host; giới hạn cgroup cần systemd-run khi được phép.",
+      "bwrapNote": "Cần /usr/bin/bwrap. Cài bubblewrap (apt/yum/apk). Giới hạn RAM/CPU/pids cần systemd-run; nếu thất bại (vd. non-root), sandbox vẫn chạy nhưng không áp các giới hạn đó.",
       "mode": "Chế độ",
       "workspaceAccess": "Truy cập workspace",
       "image": "Hình ảnh",

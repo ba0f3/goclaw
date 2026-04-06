@@ -645,7 +645,10 @@
     },
     "sandbox": {
       "title": "沙箱",
-      "description": "用于代码执行隔离的 Docker 沙箱",
+      "description": "使用 Docker 或 Bubblewrap 隔离代码执行",
+      "backend": "后端",
+      "backendTip": "docker：容器镜像；bwrap：主机 /usr/bin/bwrap；cgroup 限额需可用的 systemd-run。",
+      "bwrapNote": "需要 /usr/bin/bwrap。安装 bubblewrap（apt/yum/apk）。内存/CPU/pids 上限依赖 systemd-run；若失败（如非 root），沙箱仍可运行但不会施加这些 cgroup 限制。",
       "mode": "模式",
       "workspaceAccess": "工作区访问",
       "image": "镜像",

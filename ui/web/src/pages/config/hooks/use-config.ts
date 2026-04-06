@@ -8,10 +8,17 @@ import { toast } from "@/stores/use-toast-store";
 import i18n from "@/i18n";
 import { userFriendlyError } from "@/lib/error-utils";
 
+/** Extra keys from config.get (live server capabilities). */
+export interface ConfigRuntimeSnapshot {
+  bwrap_binary_ok?: boolean;
+  bwrap_cgroup_limits_active?: boolean;
+}
+
 interface ConfigData {
   config: Record<string, unknown>;
   hash: string;
   path: string;
+  runtime?: ConfigRuntimeSnapshot;
 }
 
 export function useConfig() {
@@ -36,6 +43,7 @@ export function useConfig() {
   const config = data?.config ?? null;
   const hash = data?.hash ?? "";
   const configPath = data?.path ?? "";
+  const runtime = data?.runtime;
 
   const invalidate = useCallback(
     () => queryClient.invalidateQueries({ queryKey: queryKeys.config.all }),
@@ -90,5 +98,5 @@ export function useConfig() {
     [ws, invalidate],
   );
 
-  return { config, hash, configPath, loading, saving, error, refresh: invalidate, applyRaw, patch };
+  return { config, hash, configPath, runtime, loading, saving, error, refresh: invalidate, applyRaw, patch };
 }

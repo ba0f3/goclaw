@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -188,9 +189,10 @@ type MemoryConfig struct {
 	MinScore          float64 `json:"min_score,omitempty"`          // minimum relevance score (default 0.35)
 }
 
-// SandboxConfig configures Docker-based sandbox execution.
+// SandboxConfig configures sandbox execution (Docker or bubblewrap).
 // Matching TS agents.defaults.sandbox.
 type SandboxConfig struct {
+	Backend         string            `json:"backend,omitempty"`          // "docker" (default), "bwrap"
 	Mode            string            `json:"mode,omitempty"`             // "off" (default), "non-main", "all"
 	Image           string            `json:"image,omitempty"`            // Docker image (default: "goclaw-sandbox:bookworm-slim")
 	WorkspaceAccess string            `json:"workspace_access,omitempty"` // "none", "ro", "rw" (default)
@@ -220,6 +222,13 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 
 	if sc == nil {
 		return cfg
+	}
+
+	switch strings.ToLower(strings.TrimSpace(sc.Backend)) {
+	case "bwrap":
+		cfg.Backend = sandbox.BackendBwrap
+	default:
+		cfg.Backend = sandbox.BackendDocker
 	}
 
 	switch sc.Mode {

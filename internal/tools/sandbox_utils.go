@@ -7,26 +7,59 @@ import (
 	"strings"
 )
 
-// SandboxCwd maps the current effective workspace (from context) to its
-// corresponding path inside the sandbox container. The sandbox mounts the
-// global workspace root at containerBase (usually "/workspace"). This function
-// computes the relative path from globalWorkspace to the context workspace
-// and joins it with containerBase.
+// SandboxHostMountRoot returns the host path to bind at the sandbox container workdir
+// (e.g. /workspace). registryWorkspace is the tool registry root (ExecTool.workspace),
+// used only when ToolWorkspaceFromCtx is empty.
 //
-// Example: globalWorkspace="/app/workspace", ctx workspace="/app/workspace/agent-a/user-123"
-// → returns "/workspace/agent-a/user-123"
-func SandboxCwd(ctx context.Context, globalWorkspace, containerBase string) (string, error) {
+// When ToolWorkspaceFromCtx is set (effective session workspace from injectContext:
+// DM/group/team paths, or shared agent base when workspace sharing applies), that path
+// is mounted so the sandbox sees only that session — not sibling agents or channels.
+// Inside the container, containerBase (e.g. /workspace) is the root of that directory.
+func SandboxHostMountRoot(ctx context.Context, registryWorkspace string) string {
+	ws := ToolWorkspaceFromCtx(ctx)
+	if ws == "" {
+		return registryWorkspace
+	}
+	return filepath.Clean(ws)
+}
+
+// SandboxCwd maps the current effective workspace (from context) to its
+// corresponding path inside the sandbox container. hostMountRoot must match the path
+// passed to sandbox.Manager.Get(..., workspace, ...) for this request (use SandboxHostMountRoot).
+//
+// When hostMountRoot equals the context workspace (typical), this returns containerBase
+// (e.g. /workspace). If hostMountRoot is a strict ancestor of the context workspace,
+// the result is containerBase plus the relative suffix.
+func SandboxCwd(ctx context.Context, hostMountRoot, containerBase string) (string, error) {
 	ws := ToolWorkspaceFromCtx(ctx)
 	if ws == "" {
 		// No per-request workspace — fall back to container root.
 		return containerBase, nil
 	}
 
-	rel, err := filepath.Rel(globalWorkspace, ws)
+	rel, err := filepath.Rel(hostMountRoot, ws)
 	if err != nil || strings.HasPrefix(filepath.Clean(rel), "..") {
-		return "", fmt.Errorf("workspace %q is outside global mount %q", ws, globalWorkspace)
+		return "", fmt.Errorf("workspace %q is outside sandbox mount %q", ws, hostMountRoot)
 	}
 
+	if rel == "." {
+		return containerBase, nil
+	}
+	return filepath.Join(containerBase, rel), nil
+}
+
+// SandboxHostPathToContainer maps a host working directory under hostMountRoot to the path
+// inside the sandbox (same mount root as Manager.Get). Use for exec cmd.Dir / docker -w.
+func SandboxHostPathToContainer(hostPath, hostMountRoot, containerBase string) (string, error) {
+	if hostPath == "" {
+		return containerBase, nil
+	}
+	hostPath = filepath.Clean(hostPath)
+	root := filepath.Clean(hostMountRoot)
+	rel, err := filepath.Rel(root, hostPath)
+	if err != nil || strings.HasPrefix(filepath.Clean(rel), "..") {
+		return "", fmt.Errorf("path %q is outside sandbox mount %q", hostPath, hostMountRoot)
+	}
 	if rel == "." {
 		return containerBase, nil
 	}
