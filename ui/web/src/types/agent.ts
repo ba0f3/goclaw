@@ -74,6 +74,7 @@ export interface WorkspaceSharingConfig {
   shared_group?: boolean;
   shared_users?: string[];
   share_memory?: boolean;
+  share_knowledge_graph?: boolean;
 }
 
 /** other_config.rag_indexing — off unless enabled is explicitly true; server fills supported_types after dependency check */
