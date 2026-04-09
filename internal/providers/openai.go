@@ -194,7 +194,9 @@ func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any)
 			return nil, fmt.Errorf("%s: decode response: %w", p.name, err)
 		}
 
-		return p.parseResponse(&oaiResp), nil
+		result := p.parseResponse(&oaiResp)
+		maybeExtractKimiTextToolCalls(result)
+		return result, nil
 	}
 }
 
@@ -338,6 +340,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		onChunk(StreamChunk{Done: true})
 	}
 
+	maybeExtractKimiTextToolCalls(result)
 	return result, nil
 }
 
