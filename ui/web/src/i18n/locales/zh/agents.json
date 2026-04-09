@@ -123,7 +123,9 @@
     "skills": "技能",
     "evolution": "进化",
     "capabilities": "能力",
-    "llmSeesAs": "LLM会看到这个为"
+    "llmSeesAs": "LLM会看到这个为",
+    "maxTokens": "最大输出 Token",
+    "maxTokensTip": "单次 LLM 调用中模型最多可生成的 token 数（保存在 other_config）。留空则使用服务器默认值（8192）。需要长工具参数或超长回复时可调高。"
   },
   "general": {
     "selfEvolution": "自我进化",

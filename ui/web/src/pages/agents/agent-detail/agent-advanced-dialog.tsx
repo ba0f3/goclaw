@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -30,7 +31,16 @@ import {
   normalizeChatGPTOAuthRouting,
 } from "./agent-display-utils";
 import { buildDraftRouting } from "./codex-pool-routing-draft-utils";
+import { InfoLabel } from "./config-sections/config-section";
 const SIMPLE_REASONING_LEVELS = new Set(["off", "low", "medium", "high"]);
+
+function parseMaxTokensFromOther(otherObj: Record<string, unknown>): number | "" {
+  const v = otherObj.max_tokens;
+  if (v === undefined || v === null || v === "") return "";
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n) || n < 0) return "";
+  return Math.floor(n);
+}
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -92,6 +102,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
       prune: a.context_pruning ?? {},
       sbEnabled: a.sandbox_config != null,
       sb: a.sandbox_config ?? {},
+      maxTokens: parseMaxTokensFromOther(otherObj),
     };
   };
 
@@ -108,6 +119,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const [prune, setPrune] = useState<ContextPruningConfig>(init.prune);
   const [sbEnabled, setSbEnabled] = useState(init.sbEnabled);
   const [sb, setSb] = useState<SandboxConfig>(init.sb);
+  const [maxTokens, setMaxTokens] = useState<number | "">(init.maxTokens);
   // Re-sync local state when dialog opens (picks up latest agent data from React Query)
   useEffect(() => {
     if (!open) return;
@@ -125,6 +137,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     setPrune(s.prune);
     setSbEnabled(s.sbEnabled);
     setSb(s.sb);
+    setMaxTokens(s.maxTokens);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -195,6 +208,11 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         (wsSharing.shared_users?.length ?? 0) > 0 || wsSharing.share_memory
       ) {
         otherBase.workspace_sharing = wsSharing;
+      }
+      if (maxTokens === "" || maxTokens === 0) {
+        delete otherBase.max_tokens;
+      } else {
+        otherBase.max_tokens = Math.floor(Number(maxTokens));
       }
       await onUpdate({
         compaction_config: comp,
@@ -287,6 +305,27 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
             description={t("configGroups.performanceDesc")}
           />
           <div className="space-y-4">
+            <div className="rounded-lg border p-3 sm:p-4">
+              <div className="max-w-md space-y-2">
+                <InfoLabel tip={t("detail.maxTokensTip")}>{t("detail.maxTokens")}</InfoLabel>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="8192"
+                  value={maxTokens === "" ? "" : maxTokens}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setMaxTokens("");
+                      return;
+                    }
+                    const n = Number(raw);
+                    setMaxTokens(Number.isFinite(n) ? n : "");
+                  }}
+                />
+              </div>
+            </div>
             <CompactionSection value={comp} onChange={setComp} />
             <ContextPruningSection
               enabled={pruneEnabled}

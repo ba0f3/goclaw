@@ -123,7 +123,9 @@
     "skills": "Kỹ năng",
     "evolution": "Tiến hóa",
     "capabilities": "Khả năng",
-    "llmSeesAs": "LLM nhìn thấy đây là"
+    "llmSeesAs": "LLM nhìn thấy đây là",
+    "maxTokens": "Token đầu ra tối đa",
+    "maxTokensTip": "Số token tối đa model có thể sinh trong một lần gọi LLM (lưu trong other_config). Để trống để dùng mặc định máy chủ (8192). Tăng khi cần tool/JSON dài hoặc một phản hồi rất dài."
   },
   "general": {
     "selfEvolution": "Tự tiến hóa",
