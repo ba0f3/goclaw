@@ -40,26 +40,42 @@ var (
 )
 
 // maybeExtractKimiTextToolCalls converts in-text Kimi tool blocks into structured ToolCalls
-// and removes them from Content. No-op when API already returned tool_calls or when
-// no Kimi-style markers are present.
+// and removes them from Content and/or Thinking. No-op when API already returned tool_calls.
+//
+// Kimi K2.x often streams the Hermes-style <|toolcall...|> block in reasoning_content only,
+// while delta.content holds the short user-facing preamble — see MoonshotAI/Kimi-K2 issues.
 func maybeExtractKimiTextToolCalls(result *ChatResponse) {
 	if result == nil || len(result.ToolCalls) > 0 {
 		return
 	}
-	if !kimiLikelyHasTextToolCalls(result.Content) {
+
+	try := func(text string, fromThinking bool) bool {
+		if !kimiLikelyHasTextToolCalls(text) {
+			return false
+		}
+		calls, stripped, ok := parseKimiStyleTextToolCalls(text)
+		if !ok || len(calls) == 0 {
+			return false
+		}
+		result.ToolCalls = calls
+		if fromThinking {
+			result.Thinking = strings.TrimSpace(stripped)
+		} else {
+			result.Content = strings.TrimSpace(stripped)
+		}
+		if result.FinishReason != "length" {
+			result.FinishReason = "tool_calls"
+		}
+		slog.Debug("kimi_text_toolcalls: extracted tool calls from assistant text",
+			"from_thinking", fromThinking, "calls", len(calls),
+			"content_len", len(result.Content), "thinking_len", len(result.Thinking))
+		return true
+	}
+
+	if try(result.Content, false) {
 		return
 	}
-	calls, stripped, ok := parseKimiStyleTextToolCalls(result.Content)
-	if !ok || len(calls) == 0 {
-		return
-	}
-	result.ToolCalls = calls
-	result.Content = strings.TrimSpace(stripped)
-	if result.FinishReason != "length" {
-		result.FinishReason = "tool_calls"
-	}
-	slog.Debug("kimi_text_toolcalls: extracted tool calls from assistant text",
-		"calls", len(calls), "content_len", len(result.Content))
+	try(result.Thinking, true)
 }
 
 func kimiLikelyHasTextToolCalls(s string) bool {

@@ -83,6 +83,27 @@ func TestMaybeExtractKimiTextToolCalls_ExtractsFromResponse(t *testing.T) {
 	}
 }
 
+func TestMaybeExtractKimiTextToolCalls_FromThinkingOnly(t *testing.T) {
+	// Kimi K2.x often puts <|toolcall...|> in reasoning_content while content is user-facing prose.
+	r := &ChatResponse{
+		Content:  "Giờ em tạo PPTX theo chuẩn 📊",
+		Thinking: `<|toolcallssectionbegin|><|toolcallbegin|>functions.write_file:1<|toolcallargumentbegin|>{"path":"x.md","content":"y"}<|toolcallend|><|toolcallssectionend|>`,
+	}
+	maybeExtractKimiTextToolCalls(r)
+	if len(r.ToolCalls) != 1 || r.ToolCalls[0].Name != "write_file" {
+		t.Fatalf("got %+v", r.ToolCalls)
+	}
+	if r.Content != "Giờ em tạo PPTX theo chuẩn 📊" {
+		t.Fatalf("content changed: %q", r.Content)
+	}
+	if r.Thinking != "" {
+		t.Fatalf("thinking=%q want empty", r.Thinking)
+	}
+	if r.FinishReason != "tool_calls" {
+		t.Fatalf("finish=%q", r.FinishReason)
+	}
+}
+
 func TestDecodeFirstJSONObject_TrailingGarbage(t *testing.T) {
 	s := `{"path":"a.txt"}<|toolcallend|> suffix`
 	m, n, err := decodeFirstJSONObject(s)
