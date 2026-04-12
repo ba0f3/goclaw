@@ -47,6 +47,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
       agentType: "predefined",
       description: "",
       selfEvolve: false,
+      acpSessionMode: "",
     },
   });
 
@@ -71,7 +72,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
     [enabledProviders, provider],
   );
   const selectedProviderId = selectedProvider?.id;
-  const { models, loading: modelsLoading } = useProviderModels(selectedProviderId);
+  const { models, acpModes, loading: modelsLoading } = useProviderModels(selectedProviderId);
   const { verify, verifying, result: verifyResult, reset: resetVerify } = useProviderVerify();
 
   useEffect(() => { resetVerify(); }, [provider, model, resetVerify]);
@@ -99,6 +100,10 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
       if (data.promptMode && data.promptMode !== "full") {
         otherConfig.prompt_mode = data.promptMode;
       }
+      const acpMode = data.acpSessionMode?.trim();
+      if (acpMode) {
+        otherConfig.acp_session_mode = acpMode;
+      }
       await onCreate({
         agent_key: data.agentKey,
         display_name: data.displayName || undefined,
@@ -122,6 +127,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   const handleProviderChange = (value: string) => {
     setValue("provider", value, { shouldValidate: true });
     setValue("model", "", { shouldValidate: false });
+    setValue("acpSessionMode", "", { shouldValidate: false });
   };
 
   const canCreate = !!agentKey && !!displayName && !!provider && !!model &&
@@ -140,7 +146,9 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
             form={form}
             enabledProviders={enabledProviders}
             poolOwnerNames={poolOwnerNames}
+            selectedProviderType={selectedProvider?.provider_type}
             models={models}
+            acpModes={acpModes}
             modelsLoading={modelsLoading}
             verifying={verifying}
             verifyResult={verifyResult}

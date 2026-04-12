@@ -81,9 +81,11 @@ func claudeCLIModels() []ModelInfo {
 	}
 }
 
-// acpModels returns the model aliases for ACP-compatible coding agents.
+// acpModels returns fallback LLM/backend aliases when session/new has no configOptions
+// (e.g. some Cursor builds). Matches common ACP agent set_config_option values.
 func acpModels() []ModelInfo {
 	return []ModelInfo{
+		{ID: "default", Name: "Default"},
 		{ID: "claude", Name: "Claude"},
 		{ID: "codex", Name: "Codex"},
 		{ID: "gemini", Name: "Gemini"},

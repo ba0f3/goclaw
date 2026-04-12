@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/providers/acp"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -444,7 +445,7 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
 		opts = append(opts, providers.WithACPPermMode(cfg.PermMode))
 	}
 	registry.Register(providers.NewACPProvider(
-		cfg.Binary, cfg.Args, workDir, idleTTL, tools.DefaultDenyPatterns(), opts...,
+		cfg.Binary, providers.EffectiveACPArgs(cfg.Binary, cfg.Args), workDir, idleTTL, tools.DefaultDenyPatterns(), opts...,
 	))
 	slog.Info("registered provider", "name", "acp", "binary", cfg.Binary)
 }
@@ -456,7 +457,7 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
 		slog.Warn("acp: no binary specified in DB provider", "name", p.Name)
 		return
 	}
-	if binary != "claude" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
+	if !acp.BinaryPathAllowed(binary) {
 		slog.Warn("security.acp: invalid binary path from DB", "path", binary)
 		return
 	}
@@ -486,10 +487,10 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
 	if workDir == "" {
 		workDir = defaultACPWorkDir()
 	}
+	spawnArgs := providers.EffectiveACPArgs(binary, settings.Args)
 	registry.RegisterForTenant(p.TenantID, providers.NewACPProvider(
-		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns(),
+		binary, spawnArgs, workDir, idleTTL, tools.DefaultDenyPatterns(),
 		providers.WithACPName(p.Name),
-		providers.WithACPModel(p.Name),
 	))
 	slog.Info("registered provider from DB", "name", p.Name, "type", "acp")
 }

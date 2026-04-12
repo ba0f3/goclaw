@@ -13,9 +13,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -143,22 +143,11 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			return nil, fmt.Errorf("agent %s is inactive", agentKey)
 		}
 
-		// Resolve provider (tenant-aware: tries tenant-specific first, falls back to master)
+		// Resolve provider (tenant-aware). No silent fallback — wrong provider breaks ACP routing
+		// (e.g. agent configured for Cursor must not use OpenRouter).
 		provider, err := providerresolve.ResolveConfiguredProvider(deps.ProviderReg, ag)
 		if err != nil {
-			// Fallback to any available provider for this tenant
-			names := deps.ProviderReg.ListForTenant(ag.TenantID)
-			if len(names) == 0 {
-				return nil, fmt.Errorf("no providers configured for agent %s", agentKey)
-			}
-			provider, _ = deps.ProviderReg.GetForTenant(ag.TenantID, names[0])
-			slog.Warn("agent provider not found, using fallback",
-				"agent", agentKey, "wanted", ag.Provider, "using", names[0])
-			if rc := ag.ParseReasoningConfig(); rc.Effort != "" && rc.Effort != "off" {
-				slog.Warn("agent thinking may not be supported by fallback provider",
-					"agent", agentKey, "thinking_level", rc.Effort,
-					"wanted_provider", ag.Provider, "fallback_provider", names[0])
-			}
+			return nil, fmt.Errorf("agent %s: resolve provider %q: %w", agentKey, ag.Provider, err)
 		}
 
 		if provider == nil {
@@ -427,7 +416,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
-			AutoInjector:          deps.AutoInjector,
+			AutoInjector:           deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ModelRegistry:          deps.ModelRegistry,
@@ -470,6 +459,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			DisabledTools:          disabledTools,
 			ReasoningConfig:        store.ResolveEffectiveReasoningConfig(providerReasoningDefaults, ag.ParseReasoningConfig()),
 			PromptMode:             PromptMode(ag.ParsePromptMode()),
+			ACPSessionMode:         ag.ParseACPSessionMode(),
 			PinnedSkills:           ag.ParsePinnedSkills(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),

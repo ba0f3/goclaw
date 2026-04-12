@@ -39,6 +39,8 @@ export interface ProviderReasoningDefaults {
 
 export interface ProviderModelsResponse {
   models: ModelInfo[];
+  /** ACP session modes (agent/plan/ask) — optional second selector. */
+  acp_modes?: ModelInfo[];
   reasoning_defaults?: ProviderReasoningDefaults;
 }
 

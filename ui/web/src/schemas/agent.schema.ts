@@ -14,6 +14,8 @@ export const agentCreateSchema = z.object({
   description: z.string().optional(),
   selfEvolve: z.boolean(),
   promptMode: z.enum(["full", "task", "minimal", "none"]).optional(),
+  /** Optional ACP session/set_mode when the provider exposes acp_modes. */
+  acpSessionMode: z.string().optional(),
 });
 
 export type AgentCreateFormData = z.infer<typeof agentCreateSchema>;

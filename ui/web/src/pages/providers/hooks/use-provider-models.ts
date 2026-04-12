@@ -25,6 +25,7 @@ export function useProviderModels(providerId: string | undefined) {
 
   return {
     models: data?.models ?? [],
+    acpModes: data?.acp_modes ?? [],
     reasoningDefaults: data?.reasoning_defaults ?? null,
     loading,
   };

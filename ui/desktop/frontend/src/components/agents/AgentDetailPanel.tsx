@@ -112,6 +112,7 @@ export function AgentDetailPanel({ agent, onSave, onResummon, onClose }: AgentDe
             <hr className="border-border" />
             <ModelBudgetSection
               provider={s.provider} model={s.model}
+              acpSessionMode={s.acpSessionMode} onAcpSessionModeChange={s.setAcpSessionMode}
               contextWindow={s.contextWindow} maxToolIterations={s.maxToolIterations}
               savedProvider={agent.provider} savedModel={agent.model}
               onProviderChange={s.setProvider} onModelChange={s.setModel}

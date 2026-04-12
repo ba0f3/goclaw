@@ -20,7 +20,7 @@ type ACPProvider struct {
 	pool         *acp.ProcessPool
 	bridge       *acp.ToolBridge
 	defaultModel string
-	permMode     string // permission mode for tool bridge
+	permMode     string   // permission mode for tool bridge
 	sessionMu    sync.Map // sessionKey → *sync.Mutex
 }
 
@@ -81,6 +81,16 @@ func NewACPProvider(binary string, args []string, workDir string, idleTTL time.D
 	return p
 }
 
+func (p *ACPProvider) prepareACPSession(ctx context.Context, proc *acp.ACPProcess, req ChatRequest) error {
+	ws := extractStringOpt(req.Options, OptWorkspace)
+	if err := proc.EnsureSession(ctx, ws); err != nil {
+		return err
+	}
+	_ = proc.ApplySessionMode(ctx, extractStringOpt(req.Options, OptACPSessionMode))
+	_ = proc.ApplySessionModel(ctx, strings.TrimSpace(req.Model))
+	return nil
+}
+
 func (p *ACPProvider) Name() string         { return p.name }
 func (p *ACPProvider) DefaultModel() string { return p.defaultModel }
 
@@ -112,6 +122,10 @@ func (p *ACPProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 	proc, err := p.pool.GetOrSpawn(ctx, sessionKey)
 	if err != nil {
 		return nil, fmt.Errorf("acp: spawn failed: %w", err)
+	}
+
+	if err := p.prepareACPSession(ctx, proc, req); err != nil {
+		return nil, err
 	}
 
 	content := extractACPContent(req)
@@ -154,6 +168,10 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 	proc, err := p.pool.GetOrSpawn(ctx, sessionKey)
 	if err != nil {
 		return nil, fmt.Errorf("acp: spawn failed: %w", err)
+	}
+
+	if err := p.prepareACPSession(ctx, proc, req); err != nil {
+		return nil, err
 	}
 
 	content := extractACPContent(req)

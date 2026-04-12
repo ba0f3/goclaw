@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   AgentData, MemoryConfig, SubagentsConfig, ToolPolicyConfig,
 } from "@/types/agent";
+import { useProviders } from "@/pages/providers/hooks/use-providers";
+import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { PersonalitySection } from "./overview-sections/personality-section";
 import { ModelBudgetSection } from "./overview-sections/model-budget-section";
@@ -17,6 +19,12 @@ import { HeartbeatCard } from "./overview-sections/heartbeat-card";
 import { MemorySection } from "./config-sections";
 import type { UseAgentHeartbeatReturn } from "../hooks/use-agent-heartbeat";
 
+function readAcpSessionMode(agent: AgentData): string {
+  const bag = (agent.other_config ?? {}) as Record<string, unknown>;
+  const v = bag.acp_session_mode;
+  return typeof v === "string" ? v.trim() : "";
+}
+
 interface AgentOverviewTabProps {
   agent: AgentData;
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
@@ -26,6 +34,7 @@ interface AgentOverviewTabProps {
 
 export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool }: AgentOverviewTabProps) {
   const { t } = useTranslation("agents");
+  const { providers } = useProviders();
 
   // Personality
   const [emoji, setEmoji] = useState(agent.emoji ?? "");
@@ -37,6 +46,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
   // Model & Budget
   const [provider, setProvider] = useState(agent.provider);
   const [model, setModel] = useState(agent.model);
+  const [acpSessionMode, setAcpSessionMode] = useState(() => readAcpSessionMode(agent));
   const [contextWindow, setContextWindow] = useState(agent.context_window || 200000);
   const [maxToolIterations, setMaxToolIterations] = useState(agent.max_tool_iterations || 20);
   const [budgetDollars, setBudgetDollars] = useState(
@@ -61,6 +71,21 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
   // Save state
   const [saving, setSaving] = useState(false);
   const [llmSaveBlocked, setLlmSaveBlocked] = useState(false);
+
+  const resolvedProvider = useMemo(
+    () => providers.find((p) => p.name === provider),
+    [providers, provider],
+  );
+  const { acpModes, loading: acpModesLoading } = useProviderModels(resolvedProvider?.id);
+  const showAcpSessionMode = resolvedProvider?.provider_type === "acp";
+
+  useEffect(() => {
+    if (resolvedProvider?.provider_type !== "acp") {
+      setAcpSessionMode("");
+      return;
+    }
+    setAcpSessionMode(readAcpSessionMode(agent));
+  }, [agent.id, agent.other_config, resolvedProvider?.provider_type]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -87,6 +112,13 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         skill_evolve: skillEvolve,
         skill_nudge_interval: skillEvolve ? skillNudgeInterval : 15,
       };
+      const otherBag = { ...((agent.other_config ?? {}) as Record<string, unknown>) };
+      if (resolvedProvider?.provider_type === "acp" && acpSessionMode.trim()) {
+        otherBag.acp_session_mode = acpSessionMode.trim();
+      } else {
+        delete otherBag.acp_session_mode;
+      }
+      updates.other_config = otherBag;
       // When the provider changes, clear stale pool routing config so it
       // doesn't reference members from the previous provider's pool.
       if (provider !== agent.provider) {
@@ -120,7 +152,13 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
 
       <ModelBudgetSection
         provider={provider}
-        onProviderChange={setProvider}
+        onProviderChange={(v) => {
+          setProvider(v);
+          const next = providers.find((p) => p.name === v);
+          if (next?.provider_type !== "acp") {
+            setAcpSessionMode("");
+          }
+        }}
         model={model}
         onModelChange={setModel}
         contextWindow={contextWindow}
@@ -132,6 +170,11 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         budgetDollars={budgetDollars}
         onBudgetDollarsChange={setBudgetDollars}
         onSaveBlockedChange={setLlmSaveBlocked}
+        acpSessionMode={acpSessionMode}
+        onAcpSessionModeChange={setAcpSessionMode}
+        acpModes={acpModes}
+        acpModesLoading={acpModesLoading}
+        showAcpSessionMode={showAcpSessionMode}
       />
 
       <ChatGPTOAuthRoutingSummarySection agent={agent} onManage={onManageCodexPool} />

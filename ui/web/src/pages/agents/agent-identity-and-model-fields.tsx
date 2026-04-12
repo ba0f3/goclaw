@@ -21,7 +21,10 @@ interface AgentIdentityAndModelFieldsProps {
   form: UseFormReturn<AgentCreateFormData>;
   enabledProviders: ProviderData[];
   poolOwnerNames?: Set<string>;
+  selectedProviderType?: string;
   models: ModelInfo[];
+  /** From GET /v1/providers/:id/models → acp_modes (optional ACP session mode). */
+  acpModes: ModelInfo[];
   modelsLoading: boolean;
   verifying: boolean;
   verifyResult: { valid: boolean; error?: string } | null;
@@ -37,7 +40,9 @@ export function AgentIdentityAndModelFields({
   form,
   enabledProviders,
   poolOwnerNames,
+  selectedProviderType,
   models,
+  acpModes,
   modelsLoading,
   verifying,
   verifyResult,
@@ -48,6 +53,7 @@ export function AgentIdentityAndModelFields({
   const { register, control, watch, setValue, formState: { errors } } = form;
   const provider = watch("provider");
   const model = watch("model");
+  const showAcpMode = selectedProviderType === "acp";
 
   return (
     <>
@@ -179,6 +185,31 @@ export function AgentIdentityAndModelFields({
           )}
         </div>
       </div>
+
+      {showAcpMode && (
+        <div className="space-y-2 max-w-md">
+          <Label>{t("create.acpSessionMode")}</Label>
+          <Controller
+            control={control}
+            name="acpSessionMode"
+            render={({ field }) => (
+              <Combobox
+                value={field.value ?? ""}
+                onChange={(v) => setValue("acpSessionMode", v, { shouldValidate: true })}
+                options={acpModes.map((m) => ({ value: m.id, label: m.name ?? m.id }))}
+                placeholder={
+                  acpModes.length === 0
+                    ? t("create.acpSessionModePlaceholderEmpty")
+                    : t("create.acpSessionModePlaceholder")
+                }
+                allowCustom
+                customLabel={t("create.acpSessionModeCustom")}
+              />
+            )}
+          />
+          <p className="text-xs text-muted-foreground">{t("create.acpSessionModeHint")}</p>
+        </div>
+      )}
     </>
   );
 }

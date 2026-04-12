@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -15,13 +17,14 @@ import (
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
 type ModelInfo struct {
-	ID        string                        `json:"id"`
-	Name      string                        `json:"name,omitempty"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name,omitempty"`
 	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
 }
 
 type ProviderModelsResponse struct {
 	Models            []ModelInfo                    `json:"models"`
+	AcpModes          []ModelInfo                    `json:"acp_modes,omitempty"`
 	ReasoningDefaults *store.ProviderReasoningConfig `json:"reasoning_defaults,omitempty"`
 }
 
@@ -61,9 +64,53 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// ACP agents don't need an API key — return hardcoded models
+	// ACP: live probe session/new for configOptions + modes; union with static fallback.
 	if p.ProviderType == store.ProviderACP {
-		respond(acpModels())
+		static := acpModels()
+		if strings.TrimSpace(p.APIBase) == "" {
+			respond(static)
+			return
+		}
+		probeDir := filepath.Join(config.ResolvedDataDirFromEnv(), "acp-workspaces", "model-probe")
+		probeCtx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		probe, err := providers.FetchACPProbeViaAgent(probeCtx, p.APIBase, p.Settings, probeDir, 25*time.Second)
+		if err != nil {
+			slog.Warn("providers.models.acp_probe", "provider", p.Name, "error", err)
+		}
+		models := make([]ModelInfo, 0, len(static)+len(probe.Models))
+		seen := make(map[string]struct{})
+		for _, c := range probe.Models {
+			id := strings.TrimSpace(c.ID)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			models = append(models, ModelInfo{ID: id, Name: c.Name})
+		}
+		for _, row := range static {
+			if _, ok := seen[row.ID]; ok {
+				continue
+			}
+			seen[row.ID] = struct{}{}
+			models = append(models, row)
+		}
+		acpModes := make([]ModelInfo, 0, len(probe.Modes))
+		for _, c := range probe.Modes {
+			id := strings.TrimSpace(c.ID)
+			if id == "" {
+				continue
+			}
+			acpModes = append(acpModes, ModelInfo{ID: id, Name: c.Name})
+		}
+		writeJSON(w, http.StatusOK, ProviderModelsResponse{
+			Models:            models,
+			AcpModes:          acpModes,
+			ReasoningDefaults: reasoningDefaultsForModels(p.Settings, models),
+		})
 		return
 	}
 

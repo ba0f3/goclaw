@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/providers/acp"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -56,7 +56,7 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 			binary = "claude"
 		}
 		// Validate binary against known allowlist (same check as registerACPFromDB)
-		if binary != "claude" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
+		if !acp.BinaryPathAllowed(binary) {
 			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "invalid binary path"})
 			return
 		}

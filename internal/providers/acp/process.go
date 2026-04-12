@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,13 +18,19 @@ type ACPProcess struct {
 	cmd        *exec.Cmd
 	conn       *Conn
 	sessionID  string // ACP session ID from session/new
+	sessionCwd string // absolute cwd last passed to session/new
 	agentCaps  AgentCaps
-	lastActive time.Time
-	inUse      atomic.Int32 // >0 means prompt active — reaper must skip
-	mu         sync.Mutex
-	ctx        context.Context
-	cancel     context.CancelFunc
-	exited     chan struct{} // closed when process exits
+	// lastConfigOptions from session/new or set_config_option (model sync).
+	lastConfigOptions []SessionConfigOption
+	lastAppliedACPMode string
+	toolRoot           string
+	fallbackWorkdir    string
+	lastActive         time.Time
+	inUse              atomic.Int32 // >0 means prompt active — reaper must skip
+	mu                 sync.Mutex
+	ctx                context.Context
+	cancel             context.CancelFunc
+	exited             chan struct{} // closed when process exits
 
 	// updateFn is called for session/update notifications during a prompt.
 	updateFn func(SessionUpdate)
@@ -55,7 +62,7 @@ type ProcessPool struct {
 	agentArgs   []string
 	workDir     string
 	idleTTL     time.Duration
-	mu          sync.RWMutex   // protects toolHandler
+	mu          sync.RWMutex // protects toolHandler
 	toolHandler RequestHandler
 	done        chan struct{}
 	closeOnce   sync.Once
@@ -138,12 +145,22 @@ func (pp *ProcessPool) spawn(ctx context.Context, sessionKey string) (*ACPProces
 		return nil, fmt.Errorf("acp: start %s: %w", pp.agentBinary, err)
 	}
 
+	workAbs := pp.workDir
+	if workAbs == "" {
+		workAbs = "."
+	}
+	if a, err := filepath.Abs(workAbs); err == nil {
+		workAbs = a
+	}
+	_ = os.MkdirAll(workAbs, 0o755)
+
 	proc := &ACPProcess{
-		cmd:        cmd,
-		lastActive: time.Now(),
-		ctx:        procCtx,
-		cancel:     cancel,
-		exited:     make(chan struct{}),
+		cmd:             cmd,
+		fallbackWorkdir: workAbs,
+		lastActive:      time.Now(),
+		ctx:             procCtx,
+		cancel:          cancel,
+		exited:          make(chan struct{}),
 	}
 
 	// Notification handler: route session/update to active prompt callback
@@ -240,4 +257,3 @@ func (pp *ProcessPool) Close() error {
 	})
 	return nil
 }
-

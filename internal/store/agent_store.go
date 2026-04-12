@@ -258,6 +258,30 @@ func (a *AgentData) ParsePromptMode() string {
 	return mode
 }
 
+// ParseACPSessionMode returns the ACP session operating mode id from OtherConfig (session/set_mode).
+func (a *AgentData) ParseACPSessionMode() string {
+	if len(a.OtherConfig) == 0 {
+		return ""
+	}
+	var bag map[string]json.RawMessage
+	if json.Unmarshal(a.OtherConfig, &bag) != nil {
+		return ""
+	}
+	raw, ok := bag["acp_session_mode"]
+	if !ok {
+		return ""
+	}
+	var mode string
+	if json.Unmarshal(raw, &mode) != nil {
+		return ""
+	}
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		return ""
+	}
+	return mode
+}
+
 // ParsePinnedSkills returns per-agent pinned skill names from OtherConfig JSONB.
 // Max 10 enforced. Returns nil if not set.
 func (a *AgentData) ParsePinnedSkills() []string {
@@ -320,10 +344,10 @@ type WorkspaceSharingConfig struct {
 }
 
 const (
-	ReasoningSourceUnset             = "unset"
-	ReasoningSourceLegacy            = "thinking_level"
-	ReasoningSourceAdvanced          = "reasoning"
-	ReasoningSourceProviderDefault   = "provider_default"
+	ReasoningSourceUnset           = "unset"
+	ReasoningSourceLegacy          = "thinking_level"
+	ReasoningSourceAdvanced        = "reasoning"
+	ReasoningSourceProviderDefault = "provider_default"
 	// Reasoning fallback constants — canonical definitions in providers package.
 	ReasoningFallbackDowngrade       = providers.ReasoningFallbackDowngrade
 	ReasoningFallbackDisable         = providers.ReasoningFallbackDisable

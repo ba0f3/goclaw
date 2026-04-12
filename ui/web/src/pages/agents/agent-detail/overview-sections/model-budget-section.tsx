@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { DollarSign } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
+import type { ModelInfo } from "@/types/provider";
 
 interface ModelBudgetSectionProps {
   provider: string;
@@ -19,6 +21,11 @@ interface ModelBudgetSectionProps {
   budgetDollars: string;
   onBudgetDollarsChange: (v: string) => void;
   onSaveBlockedChange?: (blocked: boolean) => void;
+  acpSessionMode?: string;
+  onAcpSessionModeChange?: (v: string) => void;
+  acpModes?: ModelInfo[];
+  acpModesLoading?: boolean;
+  showAcpSessionMode?: boolean;
 }
 
 export function ModelBudgetSection({
@@ -28,6 +35,11 @@ export function ModelBudgetSection({
   savedProvider, savedModel,
   budgetDollars, onBudgetDollarsChange,
   onSaveBlockedChange,
+  acpSessionMode = "",
+  onAcpSessionModeChange,
+  acpModes = [],
+  acpModesLoading = false,
+  showAcpSessionMode = false,
 }: ModelBudgetSectionProps) {
   const { t } = useTranslation("agents");
 
@@ -50,6 +62,27 @@ export function ModelBudgetSection({
         providerTip="LLM provider name. Must match a configured provider."
         modelTip="Model ID to use."
       />
+
+      {showAcpSessionMode && onAcpSessionModeChange && (
+        <div className="space-y-2 max-w-md">
+          <Label className="text-xs">{t("create.acpSessionMode")}</Label>
+          <Combobox
+            value={acpSessionMode}
+            onChange={onAcpSessionModeChange}
+            options={acpModes.map((m) => ({ value: m.id, label: m.name ?? m.id }))}
+            placeholder={
+              acpModesLoading
+                ? t("create.loadingModels")
+                : acpModes.length === 0
+                  ? t("create.acpSessionModePlaceholderEmpty")
+                  : t("create.acpSessionModePlaceholder")
+            }
+            allowCustom
+            customLabel={t("create.acpSessionModeCustom")}
+          />
+          <p className="text-xs text-muted-foreground">{t("create.acpSessionModeHint")}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">

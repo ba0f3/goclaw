@@ -7,8 +7,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -18,7 +21,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/providers/acp"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -151,9 +156,42 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	if h.providerReg == nil || !p.Enabled {
 		return
 	}
-	// ACP agents don't need an API key — skip in-memory registration
-	// (ACP providers are registered via gateway_providers.go on startup or restart)
 	if p.ProviderType == store.ProviderACP {
+		binary := strings.TrimSpace(p.APIBase)
+		if binary == "" || !acp.BinaryPathAllowed(binary) {
+			return
+		}
+		if _, err := exec.LookPath(binary); err != nil {
+			return
+		}
+		var settings struct {
+			Args     []string `json:"args"`
+			IdleTTL  string   `json:"idle_ttl"`
+			PermMode string   `json:"perm_mode"`
+			WorkDir  string   `json:"work_dir"`
+		}
+		if len(p.Settings) > 0 {
+			_ = json.Unmarshal(p.Settings, &settings)
+		}
+		idleTTL := 5 * time.Minute
+		if settings.IdleTTL != "" {
+			if d, err := time.ParseDuration(settings.IdleTTL); err == nil {
+				idleTTL = d
+			}
+		}
+		workDir := settings.WorkDir
+		if workDir == "" {
+			workDir = filepath.Join(config.ResolvedDataDirFromEnv(), "acp-workspaces")
+		}
+		var acpOpts []providers.ACPOption
+		if settings.PermMode != "" {
+			acpOpts = append(acpOpts, providers.WithACPPermMode(settings.PermMode))
+		}
+		spawnArgs := providers.EffectiveACPArgs(binary, settings.Args)
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewACPProvider(
+			binary, spawnArgs, workDir, idleTTL, tools.DefaultDenyPatterns(),
+			append(acpOpts, providers.WithACPName(p.Name))...,
+		))
 		return
 	}
 	// Claude CLI doesn't need an API key — register immediately

@@ -7,6 +7,8 @@ import { getApiClient } from '../../lib/api'
 interface ModelBudgetSectionProps {
   provider: string
   model: string
+  acpSessionMode?: string
+  onAcpSessionModeChange?: (v: string) => void
   contextWindow: number
   maxToolIterations: number
   savedProvider: string
@@ -19,7 +21,8 @@ interface ModelBudgetSectionProps {
 }
 
 export function ModelBudgetSection({
-  provider, model, contextWindow, maxToolIterations,
+  provider, model, acpSessionMode = '', onAcpSessionModeChange,
+  contextWindow, maxToolIterations,
   savedProvider, savedModel,
   onProviderChange, onModelChange, onContextWindowChange, onMaxToolIterationsChange,
   onSaveBlockedChange,
@@ -27,6 +30,7 @@ export function ModelBudgetSection({
   const { t } = useTranslation(['agents', 'common'])
   const { providers } = useProviders()
   const [models, setModels] = useState<string[]>([])
+  const [acpModes, setAcpModes] = useState<Array<{ id: string; name?: string }>>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [verifyResult, setVerifyResult] = useState<{ valid: boolean; error?: string } | null>(null)
   const [verifying, setVerifying] = useState(false)
@@ -40,10 +44,14 @@ export function ModelBudgetSection({
   const loadModels = useCallback(async (providerId: string) => {
     setModelsLoading(true)
     try {
-      const res = await getApiClient().get<{ models: Array<{ id: string }> }>(
+      const res = await getApiClient().get<{
+        models: Array<{ id: string }>
+        acp_modes?: Array<{ id: string; name?: string }>
+      }>(
         `/v1/providers/${providerId}/models`,
       )
       setModels((res.models ?? []).map((m) => m.id))
+      setAcpModes(res.acp_modes ?? [])
     } catch {
       setModels([])
     } finally {
@@ -96,6 +104,13 @@ export function ModelBudgetSection({
     [models],
   )
 
+  const acpModeOptions = useMemo(
+    () => acpModes.map((m) => ({ value: m.id, label: m.name ?? m.id })),
+    [acpModes],
+  )
+
+  const showAcpMode = selectedProvider?.provider_type === 'acp' && onAcpSessionModeChange
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-text-primary">{t('agents:detail.modelBudget')}</h3>
@@ -117,6 +132,26 @@ export function ModelBudgetSection({
           />
         </div>
       </div>
+
+      {showAcpMode && (
+        <div className="space-y-1 max-w-md">
+          <label className="text-xs font-medium text-text-secondary">{t('agents:create.acpSessionMode')}</label>
+          <Combobox
+            value={acpSessionMode}
+            onChange={onAcpSessionModeChange}
+            options={acpModeOptions}
+            placeholder={
+              modelsLoading
+                ? t('common:loading')
+                : acpModes.length === 0
+                  ? t('agents:create.acpSessionModePlaceholderEmpty')
+                  : t('agents:create.acpSessionModePlaceholder')
+            }
+            allowCustom
+          />
+          <p className="text-[10px] text-text-muted">{t('agents:create.acpSessionModeHint')}</p>
+        </div>
+      )}
 
       {/* Verify button + result */}
       {needsVerify && (

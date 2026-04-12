@@ -1,14 +1,17 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type {
   AgentData, ContextPruningConfig, SubagentsConfig, ToolPolicyConfig,
   SandboxConfig, AgentReasoningConfig, ReasoningOverrideMode,
 } from '../types/agent'
+import { useProviders } from './use-providers'
 
 export function useAgentDetailState(
   agent: AgentData,
   onSave: (id: string, updates: Partial<AgentData>) => Promise<void>,
   onClose: () => void,
 ) {
+  const { providers } = useProviders()
+
   // --- Identity --- (promoted fields: read top-level, fallback to other_config for legacy data)
   const [emoji, setEmoji] = useState(agent.emoji ?? (agent.other_config?.emoji as string) ?? '🤖')
   const [displayName, setDisplayName] = useState(agent.display_name ?? '')
@@ -17,8 +20,27 @@ export function useAgentDetailState(
   const [isDefault, setIsDefault] = useState(agent.is_default ?? false)
 
   // --- Model ---
-  const [provider, setProvider] = useState(agent.provider)
+  const [provider, setProviderRaw] = useState(agent.provider)
   const [model, setModel] = useState(agent.model)
+  const [acpSessionMode, setAcpSessionMode] = useState(
+    typeof agent.other_config?.acp_session_mode === 'string' ? agent.other_config.acp_session_mode : '',
+  )
+
+  const setProvider = useCallback(
+    (v: string) => {
+      setProviderRaw(v)
+      const p = providers.find((x) => x.name === v)
+      if (p?.provider_type !== 'acp') {
+        setAcpSessionMode('')
+      }
+    },
+    [providers],
+  )
+
+  useEffect(() => {
+    const v = agent.other_config?.acp_session_mode
+    setAcpSessionMode(typeof v === 'string' ? v : '')
+  }, [agent.id, agent.other_config])
   const [contextWindow, setContextWindow] = useState(agent.context_window ?? 200000)
   const [maxToolIterations, setMaxToolIterations] = useState(agent.max_tool_iterations ?? 25)
 
@@ -96,6 +118,13 @@ export function useAgentDetailState(
         delete otherConfig.pinned_skills
       }
 
+      const resolved = providers.find((p) => p.name === provider)
+      if (resolved?.provider_type === 'acp' && acpSessionMode.trim()) {
+        otherConfig.acp_session_mode = acpSessionMode.trim()
+      } else {
+        delete otherConfig.acp_session_mode
+      }
+
       await onSave(agent.id, {
         display_name: displayName.trim() || undefined,
         // Promoted fields at top level
@@ -128,9 +157,9 @@ export function useAgentDetailState(
       setSaving(false)
     }
   }, [
-    agent, emoji, displayName, description, selfEvolve, skillLearning, skillNudgeInterval,
+    agent, providers, emoji, displayName, description, selfEvolve, skillLearning, skillNudgeInterval,
     promptMode, reasoningMode, thinkingLevel, pinnedSkills,
-    provider, model, contextWindow, maxToolIterations, isDefault, status,
+    provider, model, acpSessionMode, contextWindow, maxToolIterations, isDefault, status,
     pruningEnabled, pruningConfig, compactionConfig,
     subEnabled, subConfig, toolsEnabled, toolsConfig, sandboxEnabled, sandboxConfig,
     onSave, onClose,
@@ -141,7 +170,7 @@ export function useAgentDetailState(
     emoji, setEmoji, displayName, setDisplayName, description, setDescription,
     status, setStatus, isDefault, setIsDefault,
     // Model
-    provider, setProvider, model, setModel,
+    provider, setProvider, model, setModel, acpSessionMode, setAcpSessionMode,
     contextWindow, setContextWindow, maxToolIterations, setMaxToolIterations,
     // Evolution
     selfEvolve, setSelfEvolve, skillLearning, setSkillLearning,
