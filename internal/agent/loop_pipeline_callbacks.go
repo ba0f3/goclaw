@@ -54,6 +54,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		executeToolCall:    l.makeExecuteToolCall(req, bridgeRS),
 		executeToolRaw:     l.makeExecuteToolRaw(req),
 		processToolResult:  l.makeProcessToolResult(req, bridgeRS),
+		authorizeToolCall:  l.makeAuthorizeToolCall(),
 		checkReadOnly:      l.makeCheckReadOnly(req, bridgeRS),
 		sanitizeContent:    SanitizeAssistantContent,
 		flushMessages:      l.makeFlushMessages(req),
@@ -82,6 +83,7 @@ type pipelineCallbackSet struct {
 	executeToolCall    func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error)
 	executeToolRaw     func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error)
 	processToolResult  func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message
+	authorizeToolCall  func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) (bool, string)
 	checkReadOnly      func(state *pipeline.RunState) (*providers.Message, bool)
 	sanitizeContent    func(string) string
 	flushMessages      func(ctx context.Context, sessionKey string, msgs []providers.Message) error
@@ -215,6 +217,33 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 			}
 		}
 		return toolDefs, nil
+	}
+}
+
+// makeAuthorizeToolCall enforces runtime tool allowlist checks before execution.
+// This is a fail-closed guard in case a model emits a tool call that was not
+// present in the per-iteration tool definitions.
+func (l *Loop) makeAuthorizeToolCall() func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) (bool, string) {
+	return func(_ context.Context, state *pipeline.RunState, tc providers.ToolCall) (bool, string) {
+		allowed := state.Tool.AllowedTools
+		if allowed == nil {
+			return true, ""
+		}
+		if allowed[tc.Name] {
+			return true, ""
+		}
+
+		// Preserve lazy activation for deferred tools (typically per-user MCP).
+		if l.tools != nil && l.tools.TryActivateDeferred(tc.Name) {
+			// Guard lazy activation with deny policy to prevent bypass.
+			if l.toolPolicy != nil && l.toolPolicy.IsDenied(tc.Name, l.agentToolPolicy) {
+				return false, "tool not allowed by policy: " + tc.Name
+			}
+			allowed[tc.Name] = true
+			return true, ""
+		}
+
+		return false, "tool not allowed by policy: " + tc.Name
 	}
 }
 
