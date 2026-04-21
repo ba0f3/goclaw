@@ -48,6 +48,19 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 
 	// Sequential fallback: ExecuteToolCall handles both I/O and state mutation.
 	for _, tc := range toolCalls {
+		if s.deps.AuthorizeToolCall != nil {
+			if ok, reason := s.deps.AuthorizeToolCall(ctx, state, tc); !ok {
+				state.Messages.AppendPending(providers.Message{
+					Role:       "tool",
+					Content:    reason,
+					ToolCallID: tc.ID,
+					IsError:    true,
+				})
+				state.Tool.TotalToolCalls++
+				continue
+			}
+		}
+
 		// Hook: sync PreToolUse — block if hook denies. Builtin-source hooks may
 		// rewrite tc.Arguments via UpdatedToolInput (e.g. path-sanitizer); apply
 		// before ExecuteToolCall so the rewrite is authoritative.
@@ -114,10 +127,30 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, toolCa
 		err     error
 	}
 
+	filteredCalls := make([]providers.ToolCall, 0, len(toolCalls))
+	for _, tc := range toolCalls {
+		if s.deps.AuthorizeToolCall != nil {
+			if ok, reason := s.deps.AuthorizeToolCall(ctx, state, tc); !ok {
+				state.Messages.AppendPending(providers.Message{
+					Role:       "tool",
+					Content:    reason,
+					ToolCallID: tc.ID,
+					IsError:    true,
+				})
+				state.Tool.TotalToolCalls++
+				continue
+			}
+		}
+		filteredCalls = append(filteredCalls, tc)
+	}
+	if len(filteredCalls) == 0 {
+		return nil
+	}
+
 	// Phase 1: parallel I/O (no state mutation)
-	results := make([]rawResult, len(toolCalls))
+	results := make([]rawResult, len(filteredCalls))
 	var wg sync.WaitGroup
-	for i, tc := range toolCalls {
+	for i, tc := range filteredCalls {
 		wg.Add(1)
 		go func(idx int, tc providers.ToolCall) {
 			defer wg.Done()

@@ -137,6 +137,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		ExecuteToolCall:   cb.executeToolCall,
 		ExecuteToolRaw:    cb.executeToolRaw,
 		ProcessToolResult: cb.processToolResult,
+		AuthorizeToolCall: cb.authorizeToolCall,
 		CheckReadOnly:     cb.checkReadOnly,
 
 		// Observe: drain InjectCh

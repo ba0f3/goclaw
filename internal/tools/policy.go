@@ -434,18 +434,31 @@ func unionWithSpec(reg *Registry, current []string, allTools []string, spec []st
 // IsDenied checks if a tool name is explicitly denied by global or agent policy.
 // Used to prevent lazy-activated deferred tools from bypassing the deny list.
 func (pe *PolicyEngine) IsDenied(name string, agentPolicy *config.ToolPolicySpec) bool {
+	candidates := map[string]struct{}{name: {}}
+	// Keep legacy alias compatibility (e.g. bash -> exec).
+	candidates[resolveAlias(name)] = struct{}{}
+	// Include registry alias mapping when available.
 	pe.mu.RLock()
 	reg := pe.registry
 	pe.mu.RUnlock()
+	if reg != nil {
+		if canonical, ok := reg.Aliases()[name]; ok && canonical != "" {
+			candidates[canonical] = struct{}{}
+		}
+	}
 
 	if pe.globalPolicy != nil {
-		if matchDenySpec(reg, name, pe.globalPolicy.Deny) {
-			return true
+		for candidate := range candidates {
+			if matchDenySpec(reg, candidate, pe.globalPolicy.Deny) {
+				return true
+			}
 		}
 	}
 	if agentPolicy != nil {
-		if matchDenySpec(reg, name, agentPolicy.Deny) {
-			return true
+		for candidate := range candidates {
+			if matchDenySpec(reg, candidate, agentPolicy.Deny) {
+				return true
+			}
 		}
 	}
 	return false
