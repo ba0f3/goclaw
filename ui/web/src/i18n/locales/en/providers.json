@@ -186,7 +186,10 @@
     "modeAgent": "Agent",
     "modePlan": "Plan",
     "modeAsk": "Ask",
-    "modeHint": "Agent: full tool access. Plan: read-only planning. Ask: Q&A without edits."
+    "modeHint": "Agent: full tool access. Plan: read-only planning. Ask: Q&A without edits.",
+    "apiKey": "CURSOR_AGENTS_API_KEY",
+    "apiKeyPlaceholder": "Optional — leave empty if Cursor is authenticated",
+    "apiKeyHint": "Set this env var if Cursor CLI is not yet authenticated"
   },
   "detail": {
     "title": "Provider Details",

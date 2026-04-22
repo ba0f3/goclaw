@@ -191,7 +191,10 @@
     "modeAgent": "Agent",
     "modePlan": "Kế hoạch",
     "modeAsk": "Hỏi đáp",
-    "modeHint": "Agent: truy cập công cụ đầy đủ. Plan: lập kế hoạch chỉ đọc. Ask: hỏi đáp không chỉnh sửa."
+    "modeHint": "Agent: truy cập công cụ đầy đủ. Plan: lập kế hoạch chỉ đọc. Ask: hỏi đáp không chỉnh sửa.",
+    "apiKey": "CURSOR_AGENTS_API_KEY",
+    "apiKeyPlaceholder": "Tùy chọn — để trống nếu Cursor đã xác thực",
+    "apiKeyHint": "Đặt biến môi trường này nếu Cursor CLI chưa xác thực"
   },
   "detail": {
     "advanced": "Nâng cao",

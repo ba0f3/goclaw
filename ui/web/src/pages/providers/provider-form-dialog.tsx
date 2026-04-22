@@ -90,6 +90,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
         acpPermMode: "approve-all",
         acpWorkDir: "",
         cursorMode: "agent",
+        cursorApiKey: "",
       });
     }
   }, [open, reset]);
@@ -117,6 +118,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
       payload.api_base = data.cursorBinary || undefined;
       const settings: Record<string, unknown> = {};
       if (data.cursorMode) settings.mode = data.cursorMode;
+      if (data.cursorApiKey) settings.api_key = data.cursorApiKey;
       if (Object.keys(settings).length > 0) payload.settings = settings;
     }
 
@@ -224,6 +226,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 <CursorCLISection
                   mode={watch("cursorMode") || "agent"}
                   onModeChange={(v) => setValue("cursorMode", v)}
+                  apiKey={watch("cursorApiKey") || ""}
+                  onApiKeyChange={(v) => setValue("cursorApiKey", v)}
                 />
               )}
 

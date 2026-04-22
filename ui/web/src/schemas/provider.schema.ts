@@ -20,6 +20,7 @@ export const providerCreateSchema = z.object({
   // Cursor CLI-specific fields
   cursorBinary: z.string().optional(),
   cursorMode: z.string().optional(),
+  cursorApiKey: z.string().optional(),
 });
 
 export type ProviderCreateFormData = z.infer<typeof providerCreateSchema>;

@@ -7,13 +7,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 interface CursorCLISectionProps {
   mode: string;
   onModeChange: (v: string) => void;
+  apiKey: string;
+  onApiKeyChange: (v: string) => void;
 }
 
-export function CursorCLISection({ mode, onModeChange }: CursorCLISectionProps) {
+export function CursorCLISection({ mode, onModeChange, apiKey, onApiKeyChange }: CursorCLISectionProps) {
   const { t } = useTranslation("providers");
 
   return (
@@ -35,6 +38,19 @@ export function CursorCLISection({ mode, onModeChange }: CursorCLISectionProps) 
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">{t("cursor.modeHint")}</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="cursorApiKey">{t("cursor.apiKey")}</Label>
+        <Input
+          id="cursorApiKey"
+          type="password"
+          value={apiKey}
+          onChange={(e) => onApiKeyChange(e.target.value)}
+          placeholder={t("cursor.apiKeyPlaceholder")}
+          className="text-base md:text-sm"
+        />
+        <p className="text-xs text-muted-foreground">{t("cursor.apiKeyHint")}</p>
       </div>
     </div>
   );

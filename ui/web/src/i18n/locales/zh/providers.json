@@ -209,7 +209,10 @@
     "modeAgent": "Agent",
     "modePlan": "规划",
     "modeAsk": "问答",
-    "modeHint": "Agent：完整工具访问。Plan：只读规划。Ask：不修改的问答。"
+    "modeHint": "Agent：完整工具访问。Plan：只读规划。Ask：不修改的问答。",
+    "apiKey": "CURSOR_AGENTS_API_KEY",
+    "apiKeyPlaceholder": "可选 — 如已验证则留空",
+    "apiKeyHint": "如果 Cursor CLI 尚未验证，请设置此环境变量"
   },
   "detail": {
     "advanced": "高级设置",
