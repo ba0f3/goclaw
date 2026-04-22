@@ -56,9 +56,15 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Cursor CLI doesn't need an API key — return hardcoded models
+	// Cursor CLI doesn't need an API key — query models directly from the CLI.
 	if p.ProviderType == store.ProviderCursorCLI {
-		respond(cursorCLIModels())
+		models, err := cursorCLIModels(p.APIBase)
+		if err != nil {
+			slog.Warn("providers.models.cursor_cli", "provider", p.Name, "error", err)
+			respond([]ModelInfo{})
+			return
+		}
+		respond(models)
 		return
 	}
 

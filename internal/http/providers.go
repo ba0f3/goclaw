@@ -35,9 +35,9 @@ type ProvidersHandler struct {
 	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
 	sysConfigStore  store.SystemConfigStore
-	tracingStore    store.TracingStore        // optional: for provider-scoped pool activity
-	agents          store.AgentCRUDStore      // optional: for provider pool activity agent lookup
-	modelReg        providers.ModelRegistry   // optional: forward-compat model resolver for Anthropic
+	tracingStore    store.TracingStore      // optional: for provider-scoped pool activity
+	agents          store.AgentCRUDStore    // optional: for provider pool activity agent lookup
+	modelReg        providers.ModelRegistry // optional: forward-compat model resolver for Anthropic
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -141,6 +141,7 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Claude CLI auth status (global — not per-provider)
 	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))
+	mux.HandleFunc("GET /v1/providers/cursor-cli/auth-status", h.auth(h.handleCursorCLIAuthStatus))
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {

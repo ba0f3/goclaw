@@ -37,12 +37,12 @@ func (p *CursorCLIProvider) buildArgs(model, workDir, sessionKey string, streami
 		args = append(args, "--mode", mode)
 	}
 	if sessionKey != "" {
-		// Use deterministic session ID for resume support
+		// Cursor Agent CLI versions may not support `--session-id`.
+		// For compatibility, only attempt `--resume` when a transcript for this
+		// deterministic session ID already exists.
 		sid := deriveCursorSessionUUID(sessionKey).String()
 		if cursorSessionFileExists(workDir, sid) {
 			args = append(args, "--resume", sid)
-		} else {
-			args = append(args, "--session-id", sid)
 		}
 	}
 	return args

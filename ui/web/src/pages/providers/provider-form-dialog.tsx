@@ -224,6 +224,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
 
               {isCursorCLI && (
                 <CursorCLISection
+                  open={open}
                   mode={watch("cursorMode") || "agent"}
                   onModeChange={(v) => setValue("cursorMode", v)}
                   apiKey={watch("cursorApiKey") || ""}

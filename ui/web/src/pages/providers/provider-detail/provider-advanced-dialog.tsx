@@ -20,6 +20,7 @@ import {
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { CLISection } from "../provider-cli-section";
+import { CursorCLISection } from "../provider-cursor-section";
 import { OAuthSection } from "../provider-oauth-section";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 
@@ -39,6 +40,8 @@ function deriveState(provider: ProviderData) {
     acpIdleTTL: (s?.idle_ttl as string) || "",
     acpPermMode: (s?.perm_mode as string) || "approve-all",
     acpWorkDir: (s?.work_dir as string) || "",
+    cursorMode: (s?.mode as string) || "agent",
+    cursorApiKey: "",
   };
 }
 
@@ -51,7 +54,9 @@ export function ProviderAdvancedDialog({
   const { t } = useTranslation("providers");
 
   const isACP = provider.provider_type === "acp";
-  const isCLI = provider.provider_type === "claude_cli" || provider.provider_type === "cursor_cli";
+  const isClaudeCLI = provider.provider_type === "claude_cli";
+  const isCursorCLI = provider.provider_type === "cursor_cli";
+  const isCLI = isClaudeCLI || isCursorCLI;
   const isOAuth = provider.provider_type === "chatgpt_oauth";
   const isStandard = !isACP && !isCLI && !isOAuth;
 
@@ -64,6 +69,8 @@ export function ProviderAdvancedDialog({
   const [acpIdleTTL, setAcpIdleTTL] = useState(init.acpIdleTTL);
   const [acpPermMode, setAcpPermMode] = useState(init.acpPermMode);
   const [acpWorkDir, setAcpWorkDir] = useState(init.acpWorkDir);
+  const [cursorMode, setCursorMode] = useState(init.cursorMode);
+  const [cursorApiKey, setCursorApiKey] = useState(init.cursorApiKey);
 
   // Re-sync when dialog opens
   useEffect(() => {
@@ -75,6 +82,8 @@ export function ProviderAdvancedDialog({
     setAcpIdleTTL(s.acpIdleTTL);
     setAcpPermMode(s.acpPermMode);
     setAcpWorkDir(s.acpWorkDir);
+    setCursorMode(s.cursorMode);
+    setCursorApiKey(s.cursorApiKey);
      
   }, [open, provider]);
 
@@ -96,6 +105,13 @@ export function ProviderAdvancedDialog({
         if (acpPermMode) settings.perm_mode = acpPermMode;
         if (acpWorkDir.trim()) settings.work_dir = acpWorkDir.trim();
         if (Object.keys(settings).length > 0) data.settings = settings;
+      } else if (isCursorCLI) {
+        const settings = { ...(provider.settings ?? {}) } as Record<string, unknown>;
+        settings.mode = cursorMode || "agent";
+        if (cursorApiKey.trim()) {
+          settings.api_key = cursorApiKey.trim();
+        }
+        data.settings = settings;
       } else if (isStandard) {
         data.api_base = apiBase.trim() || undefined;
       }
@@ -230,14 +246,24 @@ export function ProviderAdvancedDialog({
             </>
           )}
 
-          {/* Claude CLI */}
+          {/* Local CLI */}
           {isCLI && (
             <>
               <ConfigGroupHeader
-                title={t("detail.cliConfig")}
-                description={t("detail.cliConfigDesc")}
+                title={isCursorCLI ? t("detail.cursorCliConfig") : t("detail.cliConfig")}
+                description={isCursorCLI ? t("detail.cursorCliConfigDesc") : t("detail.cliConfigDesc")}
               />
-              <CLISection open={open} />
+              {isCursorCLI ? (
+                <CursorCLISection
+                  open={open}
+                  mode={cursorMode}
+                  onModeChange={setCursorMode}
+                  apiKey={cursorApiKey}
+                  onApiKeyChange={setCursorApiKey}
+                />
+              ) : (
+                <CLISection open={open} />
+              )}
             </>
           )}
 

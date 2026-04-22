@@ -173,6 +173,48 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 	})
 }
 
+// handleCursorCLIAuthStatus checks whether the Cursor CLI is authenticated on the server.
+//
+//	GET /v1/providers/cursor-cli/auth-status
+//	Response: {"authenticated": true, "email": "..."}
+//	     or: {"authenticated": false, "error": "..."}
+func (h *ProvidersHandler) handleCursorCLIAuthStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	// Try to find CLI path from existing Cursor CLI provider in DB
+	cliPath := "agent"
+	if existing, err := h.store.ListProviders(r.Context()); err == nil {
+		for _, p := range existing {
+			if p.ProviderType == store.ProviderCursorCLI && p.APIBase != "" {
+				cliPath = p.APIBase
+				break
+			}
+		}
+	}
+
+	inDocker := config.InDocker()
+
+	status, err := providers.CheckCursorAuthStatus(ctx, cliPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": false,
+			"error":         err.Error(),
+			"in_docker":     inDocker,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"authenticated":     status.IsAuthenticated,
+		"status":            status.Status,
+		"has_access_token":  status.HasAccessToken,
+		"has_refresh_token": status.HasRefreshToken,
+		"email":             status.UserInfo.Email,
+		"in_docker":         inDocker,
+	})
+}
+
 // isNonChatModel returns true for models that cannot be verified via Chat API
 // (image/video generation models).
 func isNonChatModel(model string) bool {
