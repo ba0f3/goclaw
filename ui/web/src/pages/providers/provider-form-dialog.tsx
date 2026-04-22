@@ -27,6 +27,7 @@ import { slugify } from "@/lib/slug";
 import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
+import { CursorCLISection } from "./provider-cursor-section";
 import { ACPSection } from "./provider-acp-section";
 import { ProviderStandardFormFields } from "./provider-standard-form-fields";
 import { Loader2 } from "lucide-react";
@@ -67,8 +68,10 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   const name = watch("name");
 
   const hasClaudeCLI = existingProviders.some((p) => p.provider_type === "claude_cli");
+  const hasCursorCLI = existingProviders.some((p) => p.provider_type === "cursor_cli");
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
+  const isCursorCLI = providerType === "cursor_cli";
   const isACP = providerType === "acp";
 
   // Reset form when dialog opens
@@ -86,6 +89,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
         acpIdleTTL: "",
         acpPermMode: "approve-all",
         acpWorkDir: "",
+        cursorMode: "agent",
       });
     }
   }, [open, reset]);
@@ -106,6 +110,13 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
       if (data.acpIdleTTL?.trim()) settings.idle_ttl = data.acpIdleTTL.trim();
       if (data.acpPermMode) settings.perm_mode = data.acpPermMode;
       if (data.acpWorkDir?.trim()) settings.work_dir = data.acpWorkDir.trim();
+      if (Object.keys(settings).length > 0) payload.settings = settings;
+    }
+
+    if (isCursorCLI) {
+      payload.api_base = data.cursorBinary || undefined;
+      const settings: Record<string, unknown> = {};
+      if (data.cursorMode) settings.mode = data.cursorMode;
       if (Object.keys(settings).length > 0) payload.settings = settings;
     }
 
@@ -141,6 +152,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
           <ProviderTypeSelect
             value={providerType}
             hasClaudeCLI={hasClaudeCLI}
+            hasCursorCLI={hasCursorCLI}
             alreadyAddedLabel={t("form.alreadyAdded")}
             providerTypeLabel={t("form.providerType")}
             onChange={handleProviderTypeChange}
@@ -208,6 +220,13 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
 
               {isCLI && <CLISection open={open} />}
 
+              {isCursorCLI && (
+                <CursorCLISection
+                  mode={watch("cursorMode") || "agent"}
+                  onModeChange={(v) => setValue("cursorMode", v)}
+                />
+              )}
+
               {isACP && (
                 <ACPSection
                   binary={watch("acpBinary") || ""}
@@ -223,7 +242,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 />
               )}
 
-              {!isCLI && !isACP && (
+              {!isCLI && !isCursorCLI && !isACP && (
                 <ProviderStandardFormFields
                   register={register}
                   errors={errors}
@@ -232,7 +251,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 />
               )}
 
-              {(isCLI || isACP) && (
+              {(isCLI || isCursorCLI || isACP) && (
                 <>
                   <div className="flex items-center justify-between">
                     <Label htmlFor="enabled">{t("form.enabled")}</Label>
@@ -277,9 +296,10 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   );
 }
 
-function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
+function ProviderTypeSelect({ value, hasClaudeCLI, hasCursorCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
   value: string;
   hasClaudeCLI: boolean;
+  hasCursorCLI: boolean;
   alreadyAddedLabel: string;
   providerTypeLabel: string;
   onChange: (value: string) => void;
@@ -296,10 +316,13 @@ function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTy
             <SelectItem
               key={pt.value}
               value={pt.value}
-              disabled={pt.value === "claude_cli" && hasClaudeCLI}
+              disabled={(pt.value === "claude_cli" && hasClaudeCLI) || (pt.value === "cursor_cli" && hasCursorCLI)}
             >
               {pt.label}
               {pt.value === "claude_cli" && hasClaudeCLI && (
+                <span className="ml-1 text-xs opacity-60">{alreadyAddedLabel}</span>
+              )}
+              {pt.value === "cursor_cli" && hasCursorCLI && (
                 <span className="ml-1 text-xs opacity-60">{alreadyAddedLabel}</span>
               )}
             </SelectItem>

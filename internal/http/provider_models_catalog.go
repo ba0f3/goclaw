@@ -72,6 +72,17 @@ func claudeCLIModels() []ModelInfo {
 	}
 }
 
+// cursorCLIModels returns the model aliases accepted by the Cursor Agent CLI.
+func cursorCLIModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "claude-sonnet-4-6", Name: "Claude Sonnet 4.6"},
+		{ID: "claude-opus-4-6", Name: "Claude Opus 4.6"},
+		{ID: "gpt-5.4", Name: "GPT-5.4"},
+		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
+		{ID: "o4-mini", Name: "O4 Mini"},
+	}
+}
+
 // acpModels returns the model aliases for ACP-compatible coding agents.
 func acpModels() []ModelInfo {
 	return []ModelInfo{

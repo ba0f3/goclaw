@@ -51,7 +51,7 @@ export function ProviderAdvancedDialog({
   const { t } = useTranslation("providers");
 
   const isACP = provider.provider_type === "acp";
-  const isCLI = provider.provider_type === "claude_cli";
+  const isCLI = provider.provider_type === "claude_cli" || provider.provider_type === "cursor_cli";
   const isOAuth = provider.provider_type === "chatgpt_oauth";
   const isStandard = !isACP && !isCLI && !isOAuth;
 

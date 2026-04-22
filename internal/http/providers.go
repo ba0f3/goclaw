@@ -172,6 +172,25 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewClaudeCLIProvider(cliPath, cliOpts...))
 		return
 	}
+	// Cursor CLI doesn't need an API key — register immediately
+	if p.ProviderType == store.ProviderCursorCLI {
+		cliPath := p.APIBase
+		if cliPath == "" {
+			cliPath = "agent"
+		}
+		var cliOpts []providers.CursorCLIOption
+		cliOpts = append(cliOpts, providers.WithCursorCLIName(p.Name))
+		var settings struct {
+			Mode string `json:"mode"`
+		}
+		if p.Settings != nil {
+			if err := json.Unmarshal(p.Settings, &settings); err == nil && settings.Mode != "" {
+				cliOpts = append(cliOpts, providers.WithCursorCLIMode(settings.Mode))
+			}
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewCursorCLIProvider(cliPath, cliOpts...))
+		return
+	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
 	// In Docker, swap localhost → host.docker.internal so the container can reach the host.
 	// api_base is stored with /v1 (normalized at write time), so no suffix appending needed.
@@ -242,6 +261,7 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 var localProviderTypes = map[string]bool{
 	store.ProviderOllama:    true,
 	store.ProviderClaudeCLI: true,
+	store.ProviderCursorCLI: true,
 	store.ProviderACP:       true,
 }
 
@@ -336,6 +356,21 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 			if ep.ProviderType == store.ProviderClaudeCLI {
 				writeJSON(w, http.StatusConflict, map[string]string{
 					"error": i18n.T(locale, i18n.MsgAlreadyExists, "Claude CLI provider", "only one is allowed per instance"),
+				})
+				return
+			}
+		}
+	}
+	// Same guard for Cursor CLI
+	if p.ProviderType == store.ProviderCursorCLI {
+		h.cliMu.Lock()
+		defer h.cliMu.Unlock()
+
+		existing, _ := h.store.ListProviders(r.Context())
+		for _, ep := range existing {
+			if ep.ProviderType == store.ProviderCursorCLI {
+				writeJSON(w, http.StatusConflict, map[string]string{
+					"error": i18n.T(locale, i18n.MsgAlreadyExists, "Cursor CLI provider", "only one is allowed per instance"),
 				})
 				return
 			}

@@ -79,6 +79,20 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Cursor CLI: validate binary exists and accept any model (CLI handles model validation)
+	if p.ProviderType == store.ProviderCursorCLI {
+		cliPath := p.APIBase
+		if cliPath == "" {
+			cliPath = "agent"
+		}
+		if _, err := exec.LookPath(cliPath); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "Cursor agent binary not found: " + cliPath})
+		} else {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+		}
+		return
+	}
+
 	if h.providerReg == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "no provider registry available"})
 		return

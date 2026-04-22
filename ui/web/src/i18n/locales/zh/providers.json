@@ -202,6 +202,15 @@
     "runOnServer": "在服务器终端运行：",
     "recheckButton": "重新检查"
   },
+  "cursor": {
+    "description": "Cursor CLI 使用本地",
+    "descriptionSuffix": "二进制文件。无需 API 密钥。",
+    "mode": "工作模式",
+    "modeAgent": "Agent",
+    "modePlan": "规划",
+    "modeAsk": "问答",
+    "modeHint": "Agent：完整工具访问。Plan：只读规划。Ask：不修改的问答。"
+  },
   "detail": {
     "advanced": "高级设置",
     "identity": "身份",

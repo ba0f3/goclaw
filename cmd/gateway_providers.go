@@ -198,6 +198,23 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "claude-cli")
 	}
 
+	// Cursor CLI provider (subscription-based, no API key needed)
+	if cfg.Providers.CursorCLI.CLIPath != "" {
+		cliPath := cfg.Providers.CursorCLI.CLIPath
+		var opts []providers.CursorCLIOption
+		if cfg.Providers.CursorCLI.Model != "" {
+			opts = append(opts, providers.WithCursorCLIModel(cfg.Providers.CursorCLI.Model))
+		}
+		if cfg.Providers.CursorCLI.Mode != "" {
+			opts = append(opts, providers.WithCursorCLIMode(cfg.Providers.CursorCLI.Mode))
+		}
+		if cfg.Providers.CursorCLI.BaseWorkDir != "" {
+			opts = append(opts, providers.WithCursorCLIWorkDir(cfg.Providers.CursorCLI.BaseWorkDir))
+		}
+		registry.Register(providers.NewCursorCLIProvider(cliPath, opts...))
+		slog.Info("registered provider", "name", "cursor-cli")
+	}
+
 	// ACP provider (config-based) — orchestrates any ACP-compatible agent binary
 	if cfg.Providers.ACP.Binary != "" {
 		registerACPFromConfig(registry, cfg.Providers.ACP)
@@ -304,6 +321,35 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 			}
 			registry.RegisterForTenant(p.TenantID, providers.NewClaudeCLIProvider(cliPath, cliOpts...))
+			slog.Info("registered provider from DB", "name", p.Name)
+			continue
+		}
+		// Cursor CLI doesn't need API key
+		if p.ProviderType == store.ProviderCursorCLI {
+			cliPath := p.APIBase // reuse APIBase field for CLI path
+			if cliPath == "" {
+				cliPath = "agent"
+			}
+			if cliPath != "agent" && !filepath.IsAbs(cliPath) {
+				slog.Warn("security.cursor_cli: invalid path from DB, using default", "path", cliPath)
+				cliPath = "agent"
+			}
+			if _, err := exec.LookPath(cliPath); err != nil {
+				slog.Warn("cursor-cli: binary not found, skipping", "path", cliPath, "error", err)
+				continue
+			}
+			var cliOpts []providers.CursorCLIOption
+			cliOpts = append(cliOpts, providers.WithCursorCLIName(p.Name))
+			// Parse settings JSONB for extra config (mode)
+			var settings struct {
+				Mode string `json:"mode"`
+			}
+			if p.Settings != nil {
+				if err := json.Unmarshal(p.Settings, &settings); err == nil && settings.Mode != "" {
+					cliOpts = append(cliOpts, providers.WithCursorCLIMode(settings.Mode))
+				}
+			}
+			registry.RegisterForTenant(p.TenantID, providers.NewCursorCLIProvider(cliPath, cliOpts...))
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}

@@ -154,6 +154,12 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_CLAUDE_CLI_MODEL", &c.Providers.ClaudeCLI.Model)
 	envStr("GOCLAW_CLAUDE_CLI_WORK_DIR", &c.Providers.ClaudeCLI.BaseWorkDir)
 
+	// Cursor CLI provider
+	envStr("GOCLAW_CURSOR_CLI_PATH", &c.Providers.CursorCLI.CLIPath)
+	envStr("GOCLAW_CURSOR_CLI_MODEL", &c.Providers.CursorCLI.Model)
+	envStr("GOCLAW_CURSOR_CLI_MODE", &c.Providers.CursorCLI.Mode)
+	envStr("GOCLAW_CURSOR_CLI_WORK_DIR", &c.Providers.CursorCLI.BaseWorkDir)
+
 	// Default provider/model: env is fallback only (applied when config has no value).
 	// The onboard wizard sets these in .env for initial bootstrap; once the user
 	// saves a provider/model via the Dashboard, the config-file value wins.
@@ -279,7 +285,6 @@ func (c *Config) applyEnvOverrides() {
 		c.Tools.Browser.Enabled = true
 	}
 }
-
 
 // Save writes the config to a JSON file.
 func Save(path string, cfg *Config) error {

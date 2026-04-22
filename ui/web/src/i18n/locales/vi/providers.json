@@ -184,6 +184,15 @@
     "runOnServer": "Chạy trên terminal máy chủ:",
     "recheckButton": "Kiểm tra lại"
   },
+  "cursor": {
+    "description": "Cursor CLI sử dụng tệp nhị phân",
+    "descriptionSuffix": "cục bộ của bạn. Không cần API key.",
+    "mode": "Chế độ làm việc",
+    "modeAgent": "Agent",
+    "modePlan": "Kế hoạch",
+    "modeAsk": "Hỏi đáp",
+    "modeHint": "Agent: truy cập công cụ đầy đủ. Plan: lập kế hoạch chỉ đọc. Ask: hỏi đáp không chỉnh sửa."
+  },
   "detail": {
     "advanced": "Nâng cao",
     "identity": "Danh tính",

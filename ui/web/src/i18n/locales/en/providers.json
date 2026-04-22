@@ -179,6 +179,15 @@
     "runOnServer": "Run on the server terminal:",
     "recheckButton": "Re-check"
   },
+  "cursor": {
+    "description": "Cursor CLI uses your local",
+    "descriptionSuffix": "binary. No API key needed.",
+    "mode": "Working Mode",
+    "modeAgent": "Agent",
+    "modePlan": "Plan",
+    "modeAsk": "Ask",
+    "modeHint": "Agent: full tool access. Plan: read-only planning. Ask: Q&A without edits."
+  },
   "detail": {
     "title": "Provider Details",
     "advanced": "Advanced",
