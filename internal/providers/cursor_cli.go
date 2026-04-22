@@ -17,6 +17,16 @@ type CursorCLIProvider struct {
 	baseWorkDir  string // base dir for agent workspaces
 	mu           sync.Mutex
 	sessionMu    sync.Map // key: string, value: *sync.Mutex
+	chatIDMu     sync.Map // key: string, value: *sync.Mutex
+}
+
+// cursorChatIDRegistries maps baseWorkDir -> *sync.Map (sessionKey -> cursorChatID).
+// Package-level so ResetCursorCLISession can invalidate entries without a provider pointer.
+var cursorChatIDRegistries sync.Map // key: string, value: *sync.Map
+
+func getCursorChatIDRegistry(baseWorkDir string) *sync.Map {
+	actual, _ := cursorChatIDRegistries.LoadOrStore(baseWorkDir, &sync.Map{})
+	return actual.(*sync.Map)
 }
 
 // CursorCLIOption configures the provider.
