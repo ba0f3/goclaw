@@ -168,7 +168,7 @@
   },
   "cli": {
     "description": "Claude CLI uses your local",
-    "descriptionSuffix": "binary. No API key needed.",
+    "descriptionSuffix": "binary. API key is only needed when Cursor is not authenticated.",
     "checkingAuth": "Checking authentication...",
     "authenticatedAs": "Authenticated as",
     "switchAccount": "Switch account?",
@@ -178,6 +178,24 @@
     "notAuthenticated": "Not authenticated",
     "runOnServer": "Run on the server terminal:",
     "recheckButton": "Re-check"
+  },
+  "cursor": {
+    "description": "Cursor CLI uses your local",
+    "descriptionSuffix": "binary. No API key needed.",
+    "checkingAuth": "Checking authentication...",
+    "authenticated": "Authenticated",
+    "authenticatedAs": "Authenticated as",
+    "notAuthenticated": "Not authenticated",
+    "runOnServer": "Run on the server terminal:",
+    "recheckButton": "Re-check",
+    "mode": "Working Mode",
+    "modeAgent": "Agent",
+    "modePlan": "Plan",
+    "modeAsk": "Ask",
+    "modeHint": "Agent: full tool access. Plan: read-only planning. Ask: Q&A without edits.",
+    "apiKey": "CURSOR_AGENTS_API_KEY",
+    "apiKeyPlaceholder": "Optional — leave empty if Cursor is authenticated",
+    "apiKeyHint": "Set this env var if Cursor CLI is not yet authenticated"
   },
   "detail": {
     "title": "Provider Details",
@@ -190,6 +208,8 @@
     "acpConfigDesc": "Agent subprocess settings",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "Local CLI authentication",
+    "cursorCliConfig": "Cursor CLI",
+    "cursorCliConfigDesc": "Local Cursor CLI authentication",
     "oauthConfig": "ChatGPT Subscription (OAuth)",
     "oauthConfigDesc": "Manage sign-in for this named OpenAI/Codex account",
     "nameReadonly": "Provider identifier, cannot be changed",

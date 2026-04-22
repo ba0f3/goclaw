@@ -17,6 +17,10 @@ export const providerCreateSchema = z.object({
   acpIdleTTL: z.string().optional(),
   acpPermMode: z.string().optional(),
   acpWorkDir: z.string().optional(),
+  // Cursor CLI-specific fields
+  cursorBinary: z.string().optional(),
+  cursorMode: z.string().optional(),
+  cursorApiKey: z.string().optional(),
 });
 
 export type ProviderCreateFormData = z.infer<typeof providerCreateSchema>;
