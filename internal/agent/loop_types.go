@@ -277,6 +277,7 @@ type AgentEvent struct {
 	ParentAgentID string `json:"parentAgentId,omitempty"`
 
 	// Routing context (helps WS clients filter by user/channel/session)
+	SenderID   string `json:"senderId,omitempty"` // original acting user; differs from UserID in group chats
 	UserID     string `json:"userId,omitempty"`
 	Channel    string `json:"channel,omitempty"`
 	ChatID     string `json:"chatId,omitempty"`
@@ -449,6 +450,15 @@ func (l *Loop) effectiveMaxTokens() int {
 		return l.maxTokens
 	}
 	return defaultMaxTokens
+}
+
+// resolveReserveTokens returns the reserve token buffer from compaction config.
+// Issue 958: Wire ReserveTokensFloor to prevent context overflow before compaction.
+func (l *Loop) resolveReserveTokens() int {
+	if l.compactionCfg != nil && l.compactionCfg.ReserveTokensFloor > 0 {
+		return l.compactionCfg.ReserveTokensFloor
+	}
+	return 0
 }
 
 func NewLoop(cfg LoopConfig) *Loop {
