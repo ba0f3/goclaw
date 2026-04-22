@@ -44,7 +44,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   const [error, setError] = useState("");
 
   const isOAuth = providerType === "chatgpt_oauth";
-  const isCLI = providerType === "claude_cli";
+  const isCLI = providerType === "claude_cli" || providerType === "cursor_cli";
   // Local Ollama uses no API key — the server accepts any non-empty Bearer value internally
   const isOllama = providerType === "ollama";
 

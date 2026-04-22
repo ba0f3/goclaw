@@ -35,9 +35,9 @@ type ProvidersHandler struct {
 	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
 	sysConfigStore  store.SystemConfigStore
-	tracingStore    store.TracingStore        // optional: for provider-scoped pool activity
-	agents          store.AgentCRUDStore      // optional: for provider pool activity agent lookup
-	modelReg        providers.ModelRegistry   // optional: forward-compat model resolver for Anthropic
+	tracingStore    store.TracingStore      // optional: for provider-scoped pool activity
+	agents          store.AgentCRUDStore    // optional: for provider pool activity agent lookup
+	modelReg        providers.ModelRegistry // optional: forward-compat model resolver for Anthropic
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -141,6 +141,7 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Claude CLI auth status (global — not per-provider)
 	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))
+	mux.HandleFunc("GET /v1/providers/cursor-cli/auth-status", h.auth(h.handleCursorCLIAuthStatus))
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -191,6 +192,25 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewClaudeCLIProvider(cliPath, cliOpts...))
+		return
+	}
+	// Cursor CLI doesn't need an API key — register immediately
+	if p.ProviderType == store.ProviderCursorCLI {
+		cliPath := p.APIBase
+		if cliPath == "" {
+			cliPath = "agent"
+		}
+		var cliOpts []providers.CursorCLIOption
+		cliOpts = append(cliOpts, providers.WithCursorCLIName(p.Name))
+		var settings struct {
+			Mode string `json:"mode"`
+		}
+		if p.Settings != nil {
+			if err := json.Unmarshal(p.Settings, &settings); err == nil && settings.Mode != "" {
+				cliOpts = append(cliOpts, providers.WithCursorCLIMode(settings.Mode))
+			}
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewCursorCLIProvider(cliPath, cliOpts...))
 		return
 	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
@@ -269,6 +289,7 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 var localProviderTypes = map[string]bool{
 	store.ProviderOllama:    true,
 	store.ProviderClaudeCLI: true,
+	store.ProviderCursorCLI: true,
 	store.ProviderACP:       true,
 }
 
@@ -363,6 +384,21 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 			if ep.ProviderType == store.ProviderClaudeCLI {
 				writeJSON(w, http.StatusConflict, map[string]string{
 					"error": i18n.T(locale, i18n.MsgAlreadyExists, "Claude CLI provider", "only one is allowed per instance"),
+				})
+				return
+			}
+		}
+	}
+	// Same guard for Cursor CLI
+	if p.ProviderType == store.ProviderCursorCLI {
+		h.cliMu.Lock()
+		defer h.cliMu.Unlock()
+
+		existing, _ := h.store.ListProviders(r.Context())
+		for _, ep := range existing {
+			if ep.ProviderType == store.ProviderCursorCLI {
+				writeJSON(w, http.StatusConflict, map[string]string{
+					"error": i18n.T(locale, i18n.MsgAlreadyExists, "Cursor CLI provider", "only one is allowed per instance"),
 				})
 				return
 			}
