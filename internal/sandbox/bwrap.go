@@ -57,12 +57,12 @@ func probeSystemdRunScope(ctx context.Context) bool {
 
 // BwrapSandbox runs each Exec in a fresh bubblewrap namespace (stateless).
 type BwrapSandbox struct {
-	key                string
-	config             Config
-	resolvedWorkspace  string // host path mounted at ContainerWorkdir(); empty if no workspace bind
-	cgroupViaSystemd   bool   // false → run bwrap without systemd-run (no MemoryMax/CPUQuota/TasksMax)
-	mu                 sync.Mutex
-	lastUsed           time.Time
+	key               string
+	config            Config
+	resolvedWorkspace string // host path mounted at ContainerWorkdir(); empty if no workspace bind
+	cgroupViaSystemd  bool   // false → run bwrap without systemd-run (no MemoryMax/CPUQuota/TasksMax)
+	mu                sync.Mutex
+	lastUsed          time.Time
 }
 
 // Exec runs command inside bwrap (+ optional systemd-run cgroup wrapper).
@@ -166,6 +166,9 @@ func buildBwrapArgs(cfg Config, resolvedHostWS string) []string {
 		"--ro-bind", "/usr", "/usr",
 		"--ro-bind", "/bin", "/bin",
 		"--ro-bind", "/lib", "/lib",
+		"--ro-bind", "/etc", "/etc",
+		"--ro-bind", "/usr/local", "/usr/local",
+		"--ro-bind", "/opt", "/opt",
 	}
 	if fi, err := os.Stat("/lib64"); err == nil && fi.IsDir() {
 		args = append(args, "--ro-bind", "/lib64", "/lib64")
@@ -233,10 +236,10 @@ func mergeSandboxEnv(base []string, extra map[string]string) []string {
 
 // BwrapManager tracks scope keys for API parity with DockerManager (no persistent bwrap processes).
 type BwrapManager struct {
-	config             Config
-	sandboxes          map[string]*BwrapSandbox
-	cgroupViaSystemd   bool // true if systemd-run --scope works (enforces MemoryMB/CPUs/PidsLimit)
-	mu                 sync.RWMutex
+	config           Config
+	sandboxes        map[string]*BwrapSandbox
+	cgroupViaSystemd bool // true if systemd-run --scope works (enforces MemoryMB/CPUs/PidsLimit)
+	mu               sync.RWMutex
 }
 
 // NewBwrapManager creates a bwrap-backed sandbox manager.
@@ -282,10 +285,10 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 	}
 
 	sb := &BwrapSandbox{
-		key:                key,
-		config:             cfg,
-		resolvedWorkspace:  resolved,
-		cgroupViaSystemd:   m.cgroupViaSystemd,
+		key:               key,
+		config:            cfg,
+		resolvedWorkspace: resolved,
+		cgroupViaSystemd:  m.cgroupViaSystemd,
 	}
 	m.sandboxes[key] = sb
 	slog.Debug("bwrap sandbox slot created", "key", key, "workspace_bind", resolved != "")
@@ -320,10 +323,10 @@ func (m *BwrapManager) Stats() map[string]any {
 		keys = append(keys, k)
 	}
 	return map[string]any{
-		"backend":                     string(BackendBwrap),
-		"mode":                        m.config.Mode,
-		"active":                      len(m.sandboxes),
-		"keys":                        keys,
-		"cgroup_limits_via_systemd":     m.cgroupViaSystemd,
+		"backend":                   string(BackendBwrap),
+		"mode":                      m.config.Mode,
+		"active":                    len(m.sandboxes),
+		"keys":                      keys,
+		"cgroup_limits_via_systemd": m.cgroupViaSystemd,
 	}
 }

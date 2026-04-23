@@ -107,6 +107,7 @@ func DefaultConfig() Config {
 		Tmpfs:            []string{"/tmp", "/var/tmp", "/run"},
 		PidsLimit:        256,
 		MaxOutputBytes:   1 << 20, // 1MB
+		User:             "sandbox",
 		ContainerPrefix:  "goclaw-sbx-",
 		Workdir:          "/workspace",
 		IdleHours:        24,
