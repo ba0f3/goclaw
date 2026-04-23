@@ -699,13 +699,13 @@ func WithSandboxConfig(ctx context.Context, cfg *sandbox.Config) context.Context
 }
 
 func SandboxConfigFromCtx(ctx context.Context) *sandbox.Config {
+	var cfg *sandbox.Config
 	if v, _ := ctx.Value(ctxSandboxCfg).(*sandbox.Config); v != nil {
-		return v
+		cfg = v
+	} else if rc := store.RunContextFromCtx(ctx); rc != nil {
+		cfg = rc.SandboxCfg
 	}
-	if rc := store.RunContextFromCtx(ctx); rc != nil {
-		return rc.SandboxCfg
-	}
-	return nil
+	return cfg
 }
 
 // --- Per-tenant allowed paths (filesystem tool access beyond workspace) ---

@@ -218,6 +218,9 @@ func buildBwrapArgs(cfg Config, resolvedHostWS string) []string {
 			args = append(args, "--ro-bind", resolvedHostWS, cw)
 		}
 	}
+	for _, p := range normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolvedHostWS) {
+		args = append(args, "--ro-bind", p, p)
+	}
 	return args
 }
 
@@ -294,11 +297,13 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 	if cfg.WorkspaceAccess != AccessNone && strings.TrimSpace(workspace) != "" {
 		resolved = resolveHostWorkspacePath(ctx, workspace)
 	}
+	readOnlyKey := readOnlyHostPathsKey(cfg.ReadOnlyHostPaths, resolved)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if sb, ok := m.sandboxes[key]; ok {
-		if sb.resolvedWorkspace == resolved {
+		oldReadOnlyKey := readOnlyHostPathsKey(sb.config.ReadOnlyHostPaths, sb.resolvedWorkspace)
+		if sb.resolvedWorkspace == resolved && oldReadOnlyKey == readOnlyKey {
 			return sb, nil
 		}
 		delete(m.sandboxes, key)
@@ -311,7 +316,7 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 		cgroupViaSystemd:  m.cgroupViaSystemd,
 	}
 	m.sandboxes[key] = sb
-	slog.Debug("bwrap sandbox slot created", "key", key, "workspace_bind", resolved != "")
+	slog.Debug("bwrap sandbox slot created", "key", key, "workspace_bind", resolved != "", "read_only_host_paths", len(normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolved)))
 	return sb, nil
 }
 

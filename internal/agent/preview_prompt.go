@@ -32,7 +32,11 @@ type PreviewDeps struct {
 		BuildPinnedSummary(ctx context.Context, names []string) string
 		BuildSummary(ctx context.Context, allowList []string) string
 	}
-	DataDir string // for team workspace path construction
+	DataDir                string // for team workspace path construction
+	SandboxEnabled         bool
+	SandboxContainerDir    string
+	SandboxWorkspaceAccess string
+	SandboxBackend         string
 }
 
 // PreviewResult holds the output of BuildPreviewPrompt.
@@ -135,10 +139,19 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 	}
 
 	// --- Sandbox ---
-	sandboxCfg := ag.ParseSandboxConfig()
-	sandboxEnabled := sandboxCfg != nil && sandboxCfg.Mode != "" && sandboxCfg.Mode != "off"
-	var sandboxContainerDir string
-	if sandboxEnabled {
+	// Match resolver semantics: start from global defaults, then apply per-agent override.
+	sandboxEnabled := deps.SandboxEnabled
+	sandboxContainerDir := deps.SandboxContainerDir
+	sandboxWorkspaceAccess := deps.SandboxWorkspaceAccess
+	sandboxBackend := deps.SandboxBackend
+	if sandboxCfg := ag.ParseSandboxConfig(); sandboxCfg != nil {
+		resolved := sandboxCfg.ToSandboxConfig()
+		sandboxEnabled = strings.TrimSpace(sandboxCfg.Mode) != "" && sandboxCfg.Mode != "off"
+		sandboxContainerDir = resolved.ContainerWorkdir()
+		sandboxWorkspaceAccess = string(resolved.WorkspaceAccess)
+		sandboxBackend = string(resolved.Backend)
+	}
+	if sandboxEnabled && sandboxContainerDir == "" {
 		sandboxContainerDir = "/workspace"
 	}
 
@@ -244,37 +257,39 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 
 	// --- Build system prompt (same function as LLM pipeline) ---
 	prompt := BuildSystemPrompt(SystemPromptConfig{
-		AgentID:              ag.AgentKey,
-		AgentUUID:            ag.ID.String(),
-		DisplayName:          ag.DisplayName,
-		Model:                ag.Model,
-		Mode:                 mode,
-		ToolNames:            toolNames,
-		ContextFiles:         contextFiles,
-		AgentType:            ag.AgentType,
-		Workspace:            ag.Workspace,
-		HasMemory:            true,
-		HasSpawn:             slices.Contains(toolNames, "spawn"),
-		HasSkillSearch:       slices.Contains(toolNames, "skill_search"),
-		HasSkillManage:       ag.ParseSkillEvolve() && slices.Contains(toolNames, "skill_manage"),
-		HasMCPToolSearch:     slices.Contains(toolNames, "mcp_tool_search"),
-		HasKnowledgeGraph:    slices.Contains(toolNames, "knowledge_graph_search"),
-		HasMemoryExpand:      slices.Contains(toolNames, "memory_expand"),
-		SelfEvolve:           ag.ParseSelfEvolve(),
-		ProviderType:         ag.Provider,
-		ProviderContribution: providerContrib,
-		ShellDenyGroups:      ag.ParseShellDenyGroups(),
-		SandboxEnabled:       sandboxEnabled,
-		SandboxContainerDir:  sandboxContainerDir,
-		PinnedSkillsSummary:  pinnedSummary,
-		SkillsSummary:        skillsSummary,
-		MCPToolDescs:         mcpToolDescs,
-		IsTeamContext:        isTeamCtx,
-		TeamWorkspace:        teamWorkspace,
-		TeamMembers:          teamMembers,
-		TeamGuidance:         teamGuidance,
-		DelegateTargets:      delegateTargets,
-		OrchMode:             orchMode,
+		AgentID:                ag.AgentKey,
+		AgentUUID:              ag.ID.String(),
+		DisplayName:            ag.DisplayName,
+		Model:                  ag.Model,
+		Mode:                   mode,
+		ToolNames:              toolNames,
+		ContextFiles:           contextFiles,
+		AgentType:              ag.AgentType,
+		Workspace:              ag.Workspace,
+		HasMemory:              true,
+		HasSpawn:               slices.Contains(toolNames, "spawn"),
+		HasSkillSearch:         slices.Contains(toolNames, "skill_search"),
+		HasSkillManage:         ag.ParseSkillEvolve() && slices.Contains(toolNames, "skill_manage"),
+		HasMCPToolSearch:       slices.Contains(toolNames, "mcp_tool_search"),
+		HasKnowledgeGraph:      slices.Contains(toolNames, "knowledge_graph_search"),
+		HasMemoryExpand:        slices.Contains(toolNames, "memory_expand"),
+		SelfEvolve:             ag.ParseSelfEvolve(),
+		ProviderType:           ag.Provider,
+		ProviderContribution:   providerContrib,
+		ShellDenyGroups:        ag.ParseShellDenyGroups(),
+		SandboxEnabled:         sandboxEnabled,
+		SandboxContainerDir:    sandboxContainerDir,
+		SandboxWorkspaceAccess: sandboxWorkspaceAccess,
+		SandboxBackend:         sandboxBackend,
+		PinnedSkillsSummary:    pinnedSummary,
+		SkillsSummary:          skillsSummary,
+		MCPToolDescs:           mcpToolDescs,
+		IsTeamContext:          isTeamCtx,
+		TeamWorkspace:          teamWorkspace,
+		TeamMembers:            teamMembers,
+		TeamGuidance:           teamGuidance,
+		DelegateTargets:        delegateTargets,
+		OrchMode:               orchMode,
 		// Runtime-only fields left at zero: Channel, ChannelType, ChatTitle,
 		// PeerKind, OwnerIDs, ExtraPrompt, CredentialCLIContext, IsBootstrap,
 		// SandboxWorkspaceAccess

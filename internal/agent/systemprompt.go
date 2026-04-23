@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -125,9 +126,10 @@ type SystemPromptConfig struct {
 	MCPToolDescs        map[string]string // MCP tool name → description (inline mode only)
 
 	// Sandbox info — matching TS sandboxInfo in system-prompt.ts
-	SandboxEnabled         bool   // exec tool runs inside Docker sandbox?
+	SandboxEnabled         bool   // exec tool runs inside sandbox runtime?
 	SandboxContainerDir    string // container-side workdir (e.g. "/workspace")
 	SandboxWorkspaceAccess string // "none", "ro", "rw"
+	SandboxBackend         string // "docker", "bwrap", or empty when unknown
 
 	// ProviderType identifies the LLM provider (e.g. "openai", "anthropic", "codex").
 	// Used for provider-specific prompt adjustments (e.g. SOUL echo for GPT models).
@@ -335,7 +337,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	}
 
 	// 2. ## Tooling
-	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.ShellDenyGroups)...)
+	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.SandboxBackend, cfg.ShellDenyGroups)...)
 
 	// 2.1. ## Execution Bias — full + task mode (overridable by provider)
 	if (isFull || isTask) && !cfg.IsBootstrap {
@@ -410,10 +412,20 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 6. ## Workspace (sandbox-aware: show container workdir when sandboxed)
 	lines = append(lines, buildWorkspaceSection(cfg.Workspace, cfg.SandboxEnabled, cfg.SandboxContainerDir)...)
 
-	// 6.3. ## Team Workspace — only when team context is active (leader inbound OR team dispatch)
+	// 6.3. ## Team Workspace — only when team context is active (leader inbound OR team dispatch).
+	// When sandboxed, Workspace already points to the single mounted root (/workspace),
+	// so a separate Team Shared Workspace section is redundant and can be misleading.
 	// None mode skips team sections entirely — identity-only prompt has no team awareness.
+	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && hasTeamWorkspace(cfg.ToolNames) && !cfg.SandboxEnabled {
+		lines = append(lines, buildTeamWorkspaceSection(displayTeamWorkspacePath(
+			cfg.TeamWorkspace,
+			cfg.Workspace,
+			cfg.SandboxEnabled,
+			cfg.SandboxContainerDir,
+		))...)
+	}
 	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && hasTeamWorkspace(cfg.ToolNames) {
-		lines = append(lines, buildTeamWorkspaceSection(cfg.TeamWorkspace)...)
+		lines = append(lines, buildTeamAutoStatusSection()...)
 	}
 
 	// 6.4. ## Team Members — inject roster so agent knows who to assign tasks to
@@ -534,7 +546,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 // --- Section builders ---
 
-func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups map[string]bool) []string {
+func buildToolingSection(toolNames []string, hasSandbox bool, sandboxBackend string, shellDenyGroups map[string]bool) []string {
 	lines := []string{
 		"## Tooling",
 		"",
@@ -559,12 +571,13 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 	}
 
 	if hasSandbox {
+		runtime := sandboxRuntimeLabel(sandboxBackend)
 		lines = append(lines,
 			"",
-			"NOTE: The `exec` tool runs commands inside a Docker sandbox container automatically.",
-			"You do NOT need to use `docker run` or `docker exec` — just run commands directly (e.g. `python3 script.py`).",
+			fmt.Sprintf("NOTE: The `exec` tool runs commands inside a %s sandbox automatically.", runtime),
+			"Do NOT start nested sandboxes/containers inside exec — just run commands directly (e.g. `python3 script.py`).",
 			"The sandbox has: bash, python3, git, curl, jq, ripgrep.",
-			"Do NOT attempt to install Docker or run Docker commands inside exec.",
+			"Do NOT attempt to install container runtimes or run container commands inside exec.",
 		)
 	}
 
@@ -603,6 +616,17 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		"",
 	)
 	return lines
+}
+
+func sandboxRuntimeLabel(backend string) string {
+	switch strings.ToLower(strings.TrimSpace(backend)) {
+	case "docker":
+		return "Docker"
+	case "bwrap":
+		return "bubblewrap namespace"
+	default:
+		return "sandboxed runtime"
+	}
 }
 
 func buildSafetySection() []string {
@@ -688,10 +712,12 @@ func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir s
 	// Matching TS intent: when sandboxed, display container workdir and keep guidance
 	// sandbox-centric (do not leak host path as primary file-tool base).
 	displayDir := workspace
+	slog.Debug("buildWorkspaceSection: workspace", "sandboxEnabled", sandboxEnabled, "containerDir", containerDir, "workspace", workspace)
 	guidance := "All file tool paths resolve relative to this directory. Use relative paths (e.g. \"docs/notes.md\", \".\") — do not guess absolute paths."
 	if sandboxEnabled && containerDir != "" {
+
 		displayDir = containerDir
-		guidance = "All file tool paths resolve relative to this sandbox workdir. Use relative paths so exec and file tools stay consistent."
+		guidance = "This is the single sandbox workspace root for file tools and exec. Use relative paths so all tools resolve consistently."
 	}
 
 	return []string{
@@ -701,4 +727,24 @@ func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir s
 		guidance,
 		"",
 	}
+}
+
+func displayTeamWorkspacePath(teamWorkspace, workspace string, sandboxEnabled bool, containerDir string) string {
+	slog.Debug("displayTeamWorkspacePath: teamWorkspace", "teamWorkspace", teamWorkspace, "workspace", workspace, "sandboxEnabled", sandboxEnabled, "containerDir", containerDir)
+	if teamWorkspace == "" {
+		return ""
+	}
+	if !sandboxEnabled || containerDir == "" {
+		return teamWorkspace
+	}
+	if workspace != "" {
+		if mapped, err := tools.SandboxHostPathToContainer(teamWorkspace, workspace, containerDir); err == nil {
+			return mapped
+		}
+	}
+	teamID := filepath.Base(filepath.Clean(teamWorkspace))
+	if teamID == "" || teamID == "." || teamID == string(filepath.Separator) {
+		return filepath.Join(containerDir, "team-workspace")
+	}
+	return filepath.Join(containerDir, "teams", teamID)
 }

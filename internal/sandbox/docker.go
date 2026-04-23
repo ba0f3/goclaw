@@ -27,12 +27,13 @@ func CheckDockerAvailable(ctx context.Context) error {
 
 // DockerSandbox is a sandbox backed by a Docker container.
 type DockerSandbox struct {
-	containerID string
-	config      Config
-	workspace   string
-	createdAt   time.Time
-	lastUsed    time.Time
-	mu          sync.Mutex // protects lastUsed
+	containerID   string
+	config        Config
+	workspace     string
+	teamWorkspace string
+	createdAt     time.Time
+	lastUsed      time.Time
+	mu            sync.Mutex // protects lastUsed
 }
 
 // newDockerSandbox creates and starts a Docker container for sandboxed execution.
@@ -98,6 +99,7 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 		hostPath := resolveHostWorkspacePath(ctx, workspace)
 		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, containerWorkdir, mountOpt))
 	}
+	args = append(args, dockerReadOnlyPathMountArgs(cfg, workspace)...)
 	args = append(args, "-w", containerWorkdir)
 
 	// Environment variables
@@ -257,6 +259,18 @@ func dockerResolvedWorkspaceBind(ctx context.Context, cfg Config, workspace stri
 	return resolveHostWorkspacePath(ctx, workspace)
 }
 
+func dockerReadOnlyPathMountArgs(cfg Config, workspace string) []string {
+	paths := normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, workspace)
+	if len(paths) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(paths)*2)
+	for _, p := range paths {
+		out = append(out, "-v", fmt.Sprintf("%s:%s:ro", p, p))
+	}
+	return out
+}
+
 // Get returns an existing sandbox or creates a new one for the given key.
 // If cfgOverride is non-nil, it is used for new containers instead of the global config.
 func (m *DockerManager) Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error) {
@@ -269,13 +283,15 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	}
 
 	resolved := dockerResolvedWorkspaceBind(ctx, cfg, workspace)
+	readOnlyKey := readOnlyHostPathsKey(cfg.ReadOnlyHostPaths, resolved)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if sb, ok := m.sandboxes[key]; ok {
 		oldResolved := dockerResolvedWorkspaceBind(ctx, sb.config, sb.workspace)
-		if oldResolved == resolved {
+		oldReadOnlyKey := readOnlyHostPathsKey(sb.config.ReadOnlyHostPaths, oldResolved)
+		if oldResolved == resolved && oldReadOnlyKey == readOnlyKey {
 			return sb, nil
 		}
 		delete(m.sandboxes, key)
