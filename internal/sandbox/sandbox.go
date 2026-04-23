@@ -84,6 +84,9 @@ type Config struct {
 	ContainerPrefix string   `json:"container_prefix,omitempty"`
 	Workdir         string   `json:"workdir,omitempty"` // container workdir (default "/workspace")
 
+	// Team workspace mount (additional to primary workspace)
+	TeamWorkspace string `json:"team_workspace,omitempty"`
+
 	// Pruning (matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
 	MaxAgeDays       int `json:"max_age_days,omitempty"`       // prune containers older than N days (default 7)
