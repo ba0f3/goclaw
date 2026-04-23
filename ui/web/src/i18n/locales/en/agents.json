@@ -819,7 +819,10 @@
     },
     "sandbox": {
       "title": "Sandbox",
-      "description": "Docker sandbox for code execution isolation",
+      "description": "Docker or Bubblewrap isolation for code execution",
+      "backend": "Backend",
+      "backendTip": "docker: container image; bwrap: host /usr/bin/bwrap; cgroup limits need working systemd-run when allowed.",
+      "bwrapNote": "Requires /usr/bin/bwrap. Install bubblewrap via apt/yum/apk. Memory/CPU/pids caps need systemd-run scopes; if that fails (e.g. non-root), sandbox still runs without those limits.",
       "mode": "Mode",
       "workspaceAccess": "Workspace Access",
       "image": "Image",

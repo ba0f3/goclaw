@@ -164,6 +164,9 @@ func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir stri
 	o := ApplyExecOpts(opts)
 
 	args := []string{"exec"}
+	if len(o.Stdin) > 0 {
+		args = append(args, "-i")
+	}
 	// Inject env vars as -e flags before containerID (credentialed exec)
 	for k, v := range o.Env {
 		args = append(args, "-e", k+"="+v)
@@ -175,6 +178,9 @@ func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir stri
 	args = append(args, command...)
 
 	cmd := exec.CommandContext(execCtx, "docker", args...)
+	if len(o.Stdin) > 0 {
+		cmd.Stdin = bytes.NewReader(o.Stdin)
+	}
 
 	// Limit output capture to prevent OOM from large command output
 	maxOut := s.config.MaxOutputBytes
@@ -244,6 +250,13 @@ func NewDockerManager(cfg Config) *DockerManager {
 	return m
 }
 
+func dockerResolvedWorkspaceBind(ctx context.Context, cfg Config, workspace string) string {
+	if cfg.WorkspaceAccess == AccessNone || strings.TrimSpace(workspace) == "" {
+		return ""
+	}
+	return resolveHostWorkspacePath(ctx, workspace)
+}
+
 // Get returns an existing sandbox or creates a new one for the given key.
 // If cfgOverride is non-nil, it is used for new containers instead of the global config.
 func (m *DockerManager) Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error) {
@@ -255,19 +268,20 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 		return nil, ErrSandboxDisabled
 	}
 
-	m.mu.RLock()
-	if sb, ok := m.sandboxes[key]; ok {
-		m.mu.RUnlock()
-		return sb, nil
-	}
-	m.mu.RUnlock()
+	resolved := dockerResolvedWorkspaceBind(ctx, cfg, workspace)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Double-check
 	if sb, ok := m.sandboxes[key]; ok {
-		return sb, nil
+		oldResolved := dockerResolvedWorkspaceBind(ctx, sb.config, sb.workspace)
+		if oldResolved == resolved {
+			return sb, nil
+		}
+		delete(m.sandboxes, key)
+		if err := sb.Destroy(ctx); err != nil {
+			slog.Debug("sandbox.docker.replace_destroy", "key", key, "error", err)
+		}
 	}
 
 	prefix := cfg.ContainerPrefix

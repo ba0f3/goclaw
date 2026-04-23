@@ -30,6 +30,19 @@ export function SandboxSection({ enabled, value, onToggle, onChange }: SandboxSe
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
+          <InfoLabel tip={t(`${s}.backendTip`)}>{t(`${s}.backend`)}</InfoLabel>
+          <Select
+            value={value.backend ?? "docker"}
+            onValueChange={(v) => onChange({ ...value, backend: v as SandboxConfig["backend"] })}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="docker">docker</SelectItem>
+              <SelectItem value="bwrap">bwrap</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
           <InfoLabel tip="'off' disables sandboxing, 'non-main' sandboxes only sub-agents, 'all' sandboxes every execution including the main agent.">{t(`${s}.mode`)}</InfoLabel>
           <Select
             value={value.mode ?? ""}
@@ -60,14 +73,19 @@ export function SandboxSection({ enabled, value, onToggle, onChange }: SandboxSe
           </Select>
         </div>
       </div>
-      <div className="space-y-2">
-        <InfoLabel tip="Docker image used for the sandbox container. Must be pre-built and available locally.">{t(`${s}.image`)}</InfoLabel>
-        <Input
-          placeholder="goclaw-sandbox:bookworm-slim"
-          value={value.image ?? ""}
-          onChange={(e) => onChange({ ...value, image: e.target.value || undefined })}
-        />
-      </div>
+      {(value.backend ?? "docker") === "bwrap" && (
+        <p className="text-sm text-muted-foreground">{t(`${s}.bwrapNote`)}</p>
+      )}
+      {(value.backend ?? "docker") !== "bwrap" && (
+        <div className="space-y-2">
+          <InfoLabel tip="Docker image used for the sandbox container. Must be pre-built and available locally.">{t(`${s}.image`)}</InfoLabel>
+          <Input
+            placeholder="goclaw-sandbox:bookworm-slim"
+            value={value.image ?? ""}
+            onChange={(e) => onChange({ ...value, image: e.target.value || undefined })}
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Container lifecycle scope. 'session' = one container per chat session, 'agent' = shared across sessions, 'shared' = shared across all agents.">{t(`${s}.scope`)}</InfoLabel>

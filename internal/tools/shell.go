@@ -18,6 +18,9 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+// execExitZeroNoStdout is used when exit code is 0 but stdout is empty (e.g. ls on an empty directory).
+const execExitZeroNoStdout = "(exit 0; no stdout)"
+
 // Dangerous command patterns organized into configurable deny groups.
 // Defense-in-depth: patterns complement Docker hardening (cap-drop ALL,
 // no-new-privileges, pids-limit, memory limit).
@@ -447,14 +450,15 @@ func buildHostResult(err error, stdout, stderr *limitedBuffer, ctx context.Conte
 	}
 
 	if result == "" {
-		result = "(command completed with no output)"
+		result = execExitZeroNoStdout
 	}
 	return SilentResult(capExecOutput(result, execMaxOutputChars))
 }
 
 // executeInSandbox routes a command through a Docker sandbox container.
 func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKey string) *Result {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	mount := SandboxHostMountRoot(ctx, t.workspace)
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)
@@ -468,8 +472,7 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		return ErrorResult(fmt.Sprintf("sandbox unavailable: %v (will not fall back to unsandboxed host execution)", err))
 	}
 
-	// Map host workdir to container workdir via SandboxCwd helper.
-	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	containerCwd, cwdErr := SandboxHostPathToContainer(cwd, mount, sandbox.DefaultContainerWorkdir)
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
@@ -495,7 +498,7 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		return ErrorResult(output)
 	}
 	if output == "" {
-		output = "(command completed with no output)"
+		output = execExitZeroNoStdout
 	}
 
 	return SilentResult(capExecOutput(output, execMaxOutputChars))

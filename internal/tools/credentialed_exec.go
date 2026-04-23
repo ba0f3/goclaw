@@ -461,16 +461,22 @@ func (t *ExecTool) executeCredentialedHost(ctx context.Context, absPath string, 
 func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath string, args []string,
 	cwd string, sandboxKey string, envMap map[string]string, timeout time.Duration) *Result {
 
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	mount := SandboxHostMountRoot(ctx, t.workspace)
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		slog.Warn("security.credentialed_exec_sandbox_unavailable",
 			"binary", absPath, "error", err)
 		return ErrorResult("credentialed exec requires sandbox but sandbox is unavailable: " + err.Error())
 	}
 
+	containerCwd, cwdErr := SandboxHostPathToContainer(cwd, mount, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult("credentialed exec sandbox path mapping: " + cwdErr.Error())
+	}
+
 	// Direct exec inside sandbox: [absPath, args...] with env injection
 	command := append([]string{absPath}, args...)
-	result, err := sb.Exec(ctx, command, cwd, sandbox.WithEnv(envMap))
+	result, err := sb.Exec(ctx, command, containerCwd, sandbox.WithEnv(envMap))
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("credentialed sandbox exec: %v", err))
 	}
@@ -487,7 +493,7 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 		return credentialedExecFailError(absPath, args, result.ExitCode, scrubbed+MaybeSandboxHint(result.ExitCode, scrubbed))
 	}
 	if output == "" {
-		output = "(command completed with no output)"
+		output = execExitZeroNoStdout
 	}
 	output = ScrubCredentials(output)
 	output = capExecOutput(output, execMaxOutputChars)
@@ -565,7 +571,7 @@ func formatCredentialedResult(binary string, args []string,
 	}
 
 	if output == "" {
-		output = "(command completed with no output)"
+		output = execExitZeroNoStdout
 	}
 	output = ScrubCredentials(output)
 	output = capExecOutput(output, execMaxOutputChars)

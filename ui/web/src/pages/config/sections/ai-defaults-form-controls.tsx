@@ -49,6 +49,7 @@ export function Field({
   placeholder,
   type = "text",
   step,
+  disabled,
 }: {
   label: string;
   tip?: string;
@@ -57,6 +58,7 @@ export function Field({
   placeholder?: string;
   type?: string;
   step?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="grid gap-1.5">
@@ -67,6 +69,8 @@ export function Field({
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        disabled={disabled}
+        className={disabled ? "opacity-60" : undefined}
       />
     </div>
   );

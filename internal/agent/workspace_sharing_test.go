@@ -27,11 +27,14 @@ func TestShouldShareWorkspace_SharedDM(t *testing.T) {
 func TestShouldShareWorkspace_SharedGroup(t *testing.T) {
 	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{SharedGroup: true}}
 
-	if !l.shouldShareWorkspace("group:telegram:-100", "group") {
-		t.Error("shared_group=true should share for group peer")
+	if l.shouldShareWorkspace("group:telegram:-100", "group") {
+		t.Error("group:-scoped chat IDs must not skip UserChatLayer (would expose whole channel workspace)")
 	}
 	if l.shouldShareWorkspace("user1", "direct") {
 		t.Error("shared_group=true should NOT share for direct peer")
+	}
+	if !l.shouldShareWorkspace("guild:9:user:1", "group") {
+		t.Error("shared_group=true should share for non-group:-scoped group peer")
 	}
 }
 
@@ -43,8 +46,8 @@ func TestShouldShareWorkspace_SharedUsers(t *testing.T) {
 	if !l.shouldShareWorkspace("telegram:386246614", "direct") {
 		t.Error("user in shared_users should share regardless of peerKind")
 	}
-	if !l.shouldShareWorkspace("group:telegram:-100", "group") {
-		t.Error("group in shared_users should share")
+	if l.shouldShareWorkspace("group:telegram:-100", "group") {
+		t.Error("group:-scoped IDs must not widen workspace via shared_users")
 	}
 	if l.shouldShareWorkspace("unknown-user", "direct") {
 		t.Error("user NOT in shared_users should not share")
@@ -118,23 +121,5 @@ func TestShouldShareMemory_IndependentOfWorkspace(t *testing.T) {
 	}
 	if !l2.shouldShareWorkspace("user1", "direct") {
 		t.Error("workspace should be shared when SharedDM=true")
-	}
-}
-
-func TestShouldShareWorkspace_BothEnabled(t *testing.T) {
-	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{
-		SharedDM:    true,
-		SharedGroup: true,
-		SharedUsers: []string{"extra-user"},
-	}}
-
-	if !l.shouldShareWorkspace("user1", "direct") {
-		t.Error("should share DM")
-	}
-	if !l.shouldShareWorkspace("group:tg:-100", "group") {
-		t.Error("should share group")
-	}
-	if !l.shouldShareWorkspace("extra-user", "direct") {
-		t.Error("should share listed user")
 	}
 }

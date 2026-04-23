@@ -49,6 +49,7 @@ export interface ContextPruningConfig {
 }
 
 export interface SandboxConfig {
+  backend?: "docker" | "bwrap";
   mode?: "off" | "non-main" | "all";
   image?: string;
   workspace_access?: "none" | "ro" | "rw";

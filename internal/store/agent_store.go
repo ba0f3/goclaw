@@ -321,10 +321,10 @@ type WorkspaceSharingConfig struct {
 }
 
 const (
-	ReasoningSourceUnset             = "unset"
-	ReasoningSourceLegacy            = "thinking_level"
-	ReasoningSourceAdvanced          = "reasoning"
-	ReasoningSourceProviderDefault   = "provider_default"
+	ReasoningSourceUnset           = "unset"
+	ReasoningSourceLegacy          = "thinking_level"
+	ReasoningSourceAdvanced        = "reasoning"
+	ReasoningSourceProviderDefault = "provider_default"
 	// Reasoning fallback constants — canonical definitions in providers package.
 	ReasoningFallbackDowngrade       = providers.ReasoningFallbackDowngrade
 	ReasoningFallbackDisable         = providers.ReasoningFallbackDisable

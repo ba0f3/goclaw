@@ -16,7 +16,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-
 // scanWebToolResult checks web_fetch/web_search tool results for prompt injection patterns.
 // If detected, prepends a warning (doesn't block — may be false positive).
 func (l *Loop) scanWebToolResult(toolName string, result *tools.Result) {
@@ -36,6 +35,10 @@ func (l *Loop) scanWebToolResult(toolName string, result *tools.Result) {
 // shouldShareWorkspace checks if the given user should share the base workspace
 // directory (skip per-user subfolder isolation) based on workspace_sharing config.
 func (l *Loop) shouldShareWorkspace(userID, peerKind string) bool {
+	// group:{channel}:{chatId} must never skip UserChatLayer — would expose the channel root.
+	if strings.HasPrefix(userID, "group:") {
+		return false
+	}
 	ws := l.workspaceSharing
 	if ws == nil {
 		return false

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -230,9 +231,10 @@ type DreamingConfig struct {
 	VerboseLog *bool `json:"verbose_log,omitempty"` // log debounce/below-threshold skips at info level (default false)
 }
 
-// SandboxConfig configures Docker-based sandbox execution.
+// SandboxConfig configures sandbox execution (Docker or bubblewrap).
 // Matching TS agents.defaults.sandbox.
 type SandboxConfig struct {
+	Backend         string            `json:"backend,omitempty"`          // "docker" (default), "bwrap"
 	Mode            string            `json:"mode,omitempty"`             // "off" (default), "non-main", "all"
 	Image           string            `json:"image,omitempty"`            // Docker image (default: "goclaw-sandbox:bookworm-slim")
 	WorkspaceAccess string            `json:"workspace_access,omitempty"` // "none", "ro", "rw" (default)
@@ -262,6 +264,13 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 
 	if sc == nil {
 		return cfg
+	}
+
+	switch strings.ToLower(strings.TrimSpace(sc.Backend)) {
+	case "bwrap":
+		cfg.Backend = sandbox.BackendBwrap
+	default:
+		cfg.Backend = sandbox.BackendDocker
 	}
 
 	switch sc.Mode {

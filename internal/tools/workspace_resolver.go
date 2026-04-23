@@ -78,3 +78,13 @@ func SanitizePathSegment(s string) string {
 	}
 	return b.String()
 }
+
+// WorkspaceUserSegment maps gateway user ids to a path segment; for "group:{ch}:{chatId}"
+// only chatId is used (channel is usually already in the profile workspace base).
+func WorkspaceUserSegment(userID string) string {
+	parts := strings.SplitN(userID, ":", 3)
+	if len(parts) == 3 && parts[0] == "group" && parts[2] != "" {
+		return SanitizePathSegment(parts[2])
+	}
+	return SanitizePathSegment(userID)
+}

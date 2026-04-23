@@ -25,7 +25,7 @@ import { BindingsSection } from "./sections/bindings-section";
 
 export function ConfigPage() {
   const { t } = useTranslation("config");
-  const { config, hash, loading, saving, refresh, patch } = useConfig();
+  const { config, hash, loading, saving, refresh, patch, runtime } = useConfig();
   const isMobile = useIsMobile();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && !config);
@@ -121,6 +121,7 @@ export function ConfigPage() {
         <TabsContent value="aiDefaults" className="space-y-4">
           <AiDefaultsSection
             data={config.agents as any}
+            runtime={runtime}
             onSave={(v) => patch({ agents: v })}
             saving={saving}
           />

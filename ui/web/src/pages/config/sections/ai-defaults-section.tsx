@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { InfoLabel } from "@/components/shared/info-label";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
+import type { ConfigRuntimeSnapshot } from "../hooks/use-config";
 import { SubSection, Field } from "./ai-defaults-form-controls";
 
  
@@ -18,11 +20,12 @@ const DEFAULT: AgentsData = { defaults: {} };
 
 interface Props {
   data: AgentsData | undefined;
+  runtime?: ConfigRuntimeSnapshot;
   onSave: (value: AgentsData) => Promise<void>;
   saving: boolean;
 }
 
-export function AiDefaultsSection({ data, onSave, saving }: Props) {
+export function AiDefaultsSection({ data, runtime, onSave, saving }: Props) {
   const { t } = useTranslation("config");
   const [draft, setDraft] = useState<AgentsData>(data ?? DEFAULT);
   const [dirty, setDirty] = useState(false);
@@ -67,6 +70,10 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
   const compaction = defaults.compaction ?? {};
   const pruning = defaults.contextPruning ?? {};
   const sandbox = defaults.sandbox ?? {};
+  const backendBwrap = (sandbox.backend ?? "docker") === "bwrap";
+  const bwrapCgroupOff = runtime != null && runtime.bwrap_cgroup_limits_active === false;
+  const bwrapResourceUiLocked = backendBwrap && bwrapCgroupOff;
+  const fieldDisabledTip = t("agents.sandbox.bwrapFieldDisabledTip");
 
   return (
     <Card>
@@ -228,6 +235,19 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
+              <InfoLabel tip={t("agents.sandbox.backendTip")}>{t("agents.sandbox.backend")}</InfoLabel>
+              <Select
+                value={sandbox.backend ?? "docker"}
+                onValueChange={(v) => updateNested("sandbox", { backend: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="docker">Docker</SelectItem>
+                  <SelectItem value="bwrap">Bubblewrap</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
               <Label>{t("agents.sandbox.mode")}</Label>
               <Select value={sandbox.mode ?? "off"} onValueChange={(v) => updateNested("sandbox", { mode: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -238,13 +258,52 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
                 </SelectContent>
               </Select>
             </div>
-            <Field label={t("agents.sandbox.image")} tip={t("agents.sandbox.imageTip")} value={sandbox.image} onChange={(v) => updateNested("sandbox", { image: v })} placeholder="goclaw-sandbox:bookworm-slim" />
-            <Field label={t("agents.sandbox.memoryMb")} tip={t("agents.sandbox.memoryMbTip")} type="number" value={sandbox.memory_mb} onChange={(v) => updateNested("sandbox", { memory_mb: Number(v) })} placeholder="512" />
-            <Field label={t("agents.sandbox.cpus")} tip={t("agents.sandbox.cpusTip")} type="number" step="0.5" value={sandbox.cpus} onChange={(v) => updateNested("sandbox", { cpus: Number(v) })} placeholder="1.0" />
+            {backendBwrap && bwrapCgroupOff && (
+              <Alert variant="default" className="sm:col-span-2 border-amber-500/40 bg-amber-500/5 text-amber-950 dark:text-amber-100">
+                <AlertTriangle className="text-amber-600 dark:text-amber-400" />
+                <AlertTitle>{t("agents.sandbox.bwrapSystemdLimitsTitle")}</AlertTitle>
+                <AlertDescription className="text-amber-900/90 dark:text-amber-50/90">
+                  {t("agents.sandbox.bwrapSystemdLimitsBody")}
+                </AlertDescription>
+              </Alert>
+            )}
+            {backendBwrap && !bwrapCgroupOff && (
+              <p className="text-sm text-muted-foreground sm:col-span-2">{t("agents.sandbox.bwrapNote")}</p>
+            )}
+            {(sandbox.backend ?? "docker") !== "bwrap" && (
+              <Field label={t("agents.sandbox.image")} tip={t("agents.sandbox.imageTip")} value={sandbox.image} onChange={(v) => updateNested("sandbox", { image: v })} placeholder="goclaw-sandbox:bookworm-slim" />
+            )}
+            <Field
+              label={t("agents.sandbox.memoryMb")}
+              tip={bwrapResourceUiLocked ? fieldDisabledTip : t("agents.sandbox.memoryMbTip")}
+              type="number"
+              value={sandbox.memory_mb}
+              onChange={(v) => updateNested("sandbox", { memory_mb: Number(v) })}
+              placeholder="512"
+              disabled={bwrapResourceUiLocked}
+            />
+            <Field
+              label={t("agents.sandbox.cpus")}
+              tip={bwrapResourceUiLocked ? fieldDisabledTip : t("agents.sandbox.cpusTip")}
+              type="number"
+              step="0.5"
+              value={sandbox.cpus}
+              onChange={(v) => updateNested("sandbox", { cpus: Number(v) })}
+              placeholder="1.0"
+              disabled={bwrapResourceUiLocked}
+            />
             <Field label={t("agents.sandbox.timeoutSec")} tip={t("agents.sandbox.timeoutSecTip")} type="number" value={sandbox.timeout_sec} onChange={(v) => updateNested("sandbox", { timeout_sec: Number(v) })} placeholder="300" />
-            <div className="flex items-center justify-between">
-              <Label>{t("agents.sandbox.networkEnabled")}</Label>
-              <Switch checked={sandbox.network_enabled ?? false} onCheckedChange={(v) => updateNested("sandbox", { network_enabled: v })} />
+            <div className={"flex items-center justify-between gap-2" + (bwrapResourceUiLocked ? " opacity-60" : "")}>
+              {bwrapResourceUiLocked ? (
+                <InfoLabel tip={fieldDisabledTip}>{t("agents.sandbox.networkEnabled")}</InfoLabel>
+              ) : (
+                <Label>{t("agents.sandbox.networkEnabled")}</Label>
+              )}
+              <Switch
+                checked={sandbox.network_enabled ?? false}
+                onCheckedChange={(v) => updateNested("sandbox", { network_enabled: v })}
+                disabled={bwrapResourceUiLocked}
+              />
             </div>
           </div>
         </SubSection>

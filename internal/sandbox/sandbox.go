@@ -1,7 +1,6 @@
-// Package sandbox provides Docker-based code execution isolation.
+// Package sandbox provides isolated code execution (Docker containers or bubblewrap on the host).
 //
-// Agents can run tool commands (exec, shell) inside Docker containers
-// instead of the host system. Sandbox modes:
+// Agents can run tool commands (exec, shell) inside a sandbox instead of the host system. Sandbox modes:
 //   - off: no sandboxing, execute directly on host
 //   - non-main: all agents except "main" run in sandbox
 //   - all: every agent runs in sandbox
@@ -50,9 +49,18 @@ const (
 	ScopeShared  Scope = "shared"  // one container for all
 )
 
+// BackendType selects the sandbox implementation.
+type BackendType string
+
+const (
+	BackendDocker BackendType = "docker" // Docker containers (default)
+	BackendBwrap  BackendType = "bwrap"  // bubblewrap on host; optional systemd-run for cgroup limits
+)
+
 // Config configures the sandbox system.
 // Matches TS SandboxDockerSettings + SandboxConfig.
 type Config struct {
+	Backend           BackendType       `json:"backend"`
 	Mode              Mode              `json:"mode"`
 	Image             string            `json:"image"`
 	WorkspaceAccess   Access            `json:"workspace_access"`
@@ -85,6 +93,7 @@ type Config struct {
 // DefaultConfig returns sensible defaults matching TS sandbox defaults.
 func DefaultConfig() Config {
 	return Config{
+		Backend:          BackendDocker,
 		Mode:             ModeOff,
 		Image:            "goclaw-sandbox:bookworm-slim",
 		WorkspaceAccess:  AccessRW,
@@ -98,6 +107,7 @@ func DefaultConfig() Config {
 		Tmpfs:            []string{"/tmp", "/var/tmp", "/run"},
 		PidsLimit:        256,
 		MaxOutputBytes:   1 << 20, // 1MB
+		User:             "sandbox",
 		ContainerPrefix:  "goclaw-sbx-",
 		Workdir:          "/workspace",
 		IdleHours:        24,
@@ -163,13 +173,19 @@ type ExecOption func(*ExecOpts)
 
 // ExecOpts holds optional settings applied via ExecOption.
 type ExecOpts struct {
-	Env map[string]string // extra env vars injected into the container exec
+	Env   map[string]string // extra env vars injected into the container exec
+	Stdin []byte            // optional stdin (e.g. fsbridge write via shell)
 }
 
 // WithEnv injects additional environment variables into the sandbox exec call.
 // Used by credentialed exec to pass credentials without shell interpretation.
 func WithEnv(env map[string]string) ExecOption {
 	return func(o *ExecOpts) { o.Env = env }
+}
+
+// WithStdin supplies stdin bytes for the executed command (e.g. piped content).
+func WithStdin(b []byte) ExecOption {
+	return func(o *ExecOpts) { o.Stdin = b }
 }
 
 // ApplyExecOpts resolves variadic ExecOption into ExecOpts.

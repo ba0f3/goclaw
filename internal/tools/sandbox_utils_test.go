@@ -5,11 +5,120 @@ import (
 	"testing"
 )
 
+func TestSandboxHostMountRoot(t *testing.T) {
+	tests := []struct {
+		name              string
+		ctxWorkspace      string
+		registryWorkspace string
+		want              string
+	}{
+		{
+			name:              "no context workspace uses registry",
+			ctxWorkspace:      "",
+			registryWorkspace: "/home/u/.goclaw/workspace",
+			want:              "/home/u/.goclaw/workspace",
+		},
+		{
+			name:              "DM session path is mount root",
+			ctxWorkspace:      "/home/u/.goclaw/workspace/fox-spirit/telegram/52007861",
+			registryWorkspace: "/home/u/.goclaw/workspace",
+			want:              "/home/u/.goclaw/workspace/fox-spirit/telegram/52007861",
+		},
+		{
+			name:              "team group session path",
+			ctxWorkspace:      "/home/u/.goclaw/workspace/teams/019d6093-eaa9-7a13-a4f1-d7b8925c300c/-1003819627125",
+			registryWorkspace: "/home/u/.goclaw/workspace",
+			want:              "/home/u/.goclaw/workspace/teams/019d6093-eaa9-7a13-a4f1-d7b8925c300c/-1003819627125",
+		},
+		{
+			name:              "shared agent base when context is agent root",
+			ctxWorkspace:      "/home/u/.goclaw/workspace/fox-spirit",
+			registryWorkspace: "/home/u/.goclaw/workspace/fox-spirit",
+			want:              "/home/u/.goclaw/workspace/fox-spirit",
+		},
+		{
+			name:              "context outside registry uses context path",
+			ctxWorkspace:      "/home/u/workspace/fox/telegram/52007861",
+			registryWorkspace: "/home/u/.goclaw/workspace",
+			want:              "/home/u/workspace/fox/telegram/52007861",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tt.ctxWorkspace != "" {
+				ctx = WithToolWorkspace(ctx, tt.ctxWorkspace)
+			}
+			got := SandboxHostMountRoot(ctx, tt.registryWorkspace)
+			if got != tt.want {
+				t.Errorf("SandboxHostMountRoot() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSandboxHostPathToContainer(t *testing.T) {
+	tests := []struct {
+		name          string
+		hostPath      string
+		hostMountRoot string
+		containerBase string
+		want          string
+		wantErr       bool
+	}{
+		{
+			name:          "empty host path is container base",
+			hostPath:      "",
+			hostMountRoot: "/app/ws",
+			containerBase: "/workspace",
+			want:          "/workspace",
+		},
+		{
+			name:          "mount root",
+			hostPath:      "/app/ws",
+			hostMountRoot: "/app/ws",
+			containerBase: "/workspace",
+			want:          "/workspace",
+		},
+		{
+			name:          "nested cwd",
+			hostPath:      "/app/ws/agent/u1/sub",
+			hostMountRoot: "/app/ws",
+			containerBase: "/workspace",
+			want:          "/workspace/agent/u1/sub",
+		},
+		{
+			name:          "outside mount",
+			hostPath:      "/other/x",
+			hostMountRoot: "/app/ws",
+			containerBase: "/workspace",
+			wantErr:       true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := SandboxHostPathToContainer(tt.hostPath, tt.hostMountRoot, tt.containerBase)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("SandboxHostPathToContainer() = %q, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SandboxHostPathToContainer() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("SandboxHostPathToContainer() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSandboxCwd(t *testing.T) {
 	tests := []struct {
 		name            string
 		ctxWorkspace    string // empty = no workspace in context
-		globalWorkspace string
+		globalWorkspace string // host mount root passed to SandboxCwd (must match Manager.Get)
 		containerBase   string
 		want            string
 		wantErr         bool
@@ -29,39 +138,53 @@ func TestSandboxCwd(t *testing.T) {
 			want:            "/workspace",
 		},
 		{
-			name:            "per-agent workspace",
-			ctxWorkspace:    "/app/workspace/agent-a-workspace",
-			globalWorkspace: "/app/workspace",
+			name:            "session leaf mount cwd is container root",
+			ctxWorkspace:    "/app/workspace/fox-spirit/telegram/52007861",
+			globalWorkspace: "/app/workspace/fox-spirit/telegram/52007861",
 			containerBase:   "/workspace",
-			want:            "/workspace/agent-a-workspace",
+			want:            "/workspace",
 		},
 		{
-			name:            "per-user workspace",
-			ctxWorkspace:    "/app/workspace/agent-a/user-123",
-			globalWorkspace: "/app/workspace",
+			name:            "team session leaf mount",
+			ctxWorkspace:    "/app/workspace/teams/uuid/-1003819627125",
+			globalWorkspace: "/app/workspace/teams/uuid/-1003819627125",
 			containerBase:   "/workspace",
-			want:            "/workspace/agent-a/user-123",
+			want:            "/workspace",
 		},
 		{
-			name:            "team workspace",
-			ctxWorkspace:    "/app/workspace/teams/team-uuid/chat-123",
-			globalWorkspace: "/app/workspace",
+			name:            "shared workspace mount equals agent base",
+			ctxWorkspace:    "/app/workspace/fox-spirit",
+			globalWorkspace: "/app/workspace/fox-spirit",
 			containerBase:   "/workspace",
-			want:            "/workspace/teams/team-uuid/chat-123",
+			want:            "/workspace",
 		},
 		{
-			name:            "workspace outside global mount — error",
+			name:            "workspace outside host mount — error",
 			ctxWorkspace:    "/other/path/agent-a",
 			globalWorkspace: "/app/workspace",
 			containerBase:   "/workspace",
 			wantErr:         true,
 		},
 		{
-			name:            "custom container base",
-			ctxWorkspace:    "/app/workspace/agent-a",
-			globalWorkspace: "/app/workspace",
+			name:            "disjoint tree: mount equals context workspace",
+			ctxWorkspace:    "/home/u/workspace/fox/telegram/1",
+			globalWorkspace: "/home/u/workspace/fox/telegram/1",
+			containerBase:   "/workspace",
+			want:            "/workspace",
+		},
+		{
+			name:            "disjoint tree: nested under context-as-mount",
+			ctxWorkspace:    "/home/u/workspace/fox/telegram/1",
+			globalWorkspace: "/home/u/workspace/fox",
+			containerBase:   "/workspace",
+			want:            "/workspace/telegram/1",
+		},
+		{
+			name:            "custom container base session mount",
+			ctxWorkspace:    "/app/workspace/agent-a/sub",
+			globalWorkspace: "/app/workspace/agent-a/sub",
 			containerBase:   "/home/sandbox",
-			want:            "/home/sandbox/agent-a",
+			want:            "/home/sandbox",
 		},
 	}
 

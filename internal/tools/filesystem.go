@@ -201,7 +201,8 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	mount := SandboxHostMountRoot(ctx, t.workspace)
+	containerCwd, cwdErr := SandboxCwd(ctx, mount, sandbox.DefaultContainerWorkdir)
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
@@ -216,11 +217,12 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 }
 
 func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	mount := SandboxHostMountRoot(ctx, t.workspace)
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir), nil
+	return sandbox.NewFsBridge(sb, sandbox.DefaultContainerWorkdir), nil
 }
 
 // readFileMaxChars is the output cap for read_file. Large files require offset/limit pagination.
