@@ -1,5 +1,13 @@
 package http
 
+import (
+	"bytes"
+	"fmt"
+	"os/exec"
+	"regexp"
+	"strings"
+)
+
 // bailianModels returns a hardcoded list of models available on the
 // Bailian Coding platform (coding-intl.dashscope.aliyuncs.com).
 // The platform does not expose a /v1/models endpoint.
@@ -70,6 +78,72 @@ func claudeCLIModels() []ModelInfo {
 		{ID: "opus", Name: "Opus"},
 		{ID: "haiku", Name: "Haiku"},
 	}
+}
+
+var (
+	cursorANSICSI = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	cursorANSIOSC = regexp.MustCompile(`\x1b\][^\x07]*(?:\x07|\x1b\\)`)
+)
+
+// cursorCLIModels fetches model aliases by invoking `agent models`.
+func cursorCLIModels(cliPath string) ([]ModelInfo, error) {
+	if strings.TrimSpace(cliPath) == "" {
+		cliPath = "agent"
+	}
+	cmd := exec.Command(cliPath, "models")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("cursor-cli models command failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	models := parseCursorCLIModelsOutput(out)
+	if len(models) == 0 {
+		return nil, fmt.Errorf("cursor-cli models command returned no models")
+	}
+	return models, nil
+}
+
+func parseCursorCLIModelsOutput(out []byte) []ModelInfo {
+	text := strings.ReplaceAll(string(out), "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+	models := make([]ModelInfo, 0, len(lines))
+	seen := make(map[string]struct{}, len(lines))
+	for _, raw := range lines {
+		line := strings.TrimSpace(stripCursorANSI(raw))
+		if line == "" || line == "Available models" || strings.HasPrefix(line, "Tip:") {
+			continue
+		}
+		id, name, ok := parseCursorCLIModelLine(line)
+		if !ok {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		models = append(models, ModelInfo{ID: id, Name: name})
+	}
+	return models
+}
+
+func parseCursorCLIModelLine(line string) (id string, name string, ok bool) {
+	left, right, found := strings.Cut(line, " - ")
+	if !found {
+		return "", "", false
+	}
+	id = strings.TrimSpace(left)
+	name = strings.TrimSpace(right)
+	if id == "" || name == "" {
+		return "", "", false
+	}
+	return id, name, true
+}
+
+func stripCursorANSI(s string) string {
+	b := []byte(s)
+	b = cursorANSIOSC.ReplaceAll(b, nil)
+	b = cursorANSICSI.ReplaceAll(b, nil)
+	b = bytes.ReplaceAll(b, []byte{0x1b}, nil)
+	return string(b)
 }
 
 // acpModels returns the model aliases for ACP-compatible coding agents.

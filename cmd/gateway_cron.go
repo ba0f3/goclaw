@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -61,14 +62,20 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		// Resolve channel type for system prompt context.
 		channelType := resolveChannelType(channelMgr, channel)
 
+		cronCtx := store.WithTenantID(context.Background(), job.TenantID)
+
 		// Build cron context so the agent knows delivery target and requester.
+		// When delivery targets a channel chat, inject recent history from that chat's
+		// session (same key as inbound messages). Cron runs use a separate cron:* session,
+		// so without this the model only sees the job payload — not group chat history.
 		var extraPrompt string
 		if job.Deliver && job.DeliverChannel != "" && job.DeliverTo != "" {
+			linked := linkedDeliveryChatContextBlock(cronCtx, sessionMgr, agentID, job, peerKind)
 			extraPrompt = fmt.Sprintf(
 				"[Cron Job]\nThis is scheduled job \"%s\" (ID: %s).\n"+
 					"Requester: user %s on channel \"%s\" (chat %s).\n"+
-					"Your response will be automatically delivered to that chat — just produce the content directly.",
-				job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo,
+					"Your response will be automatically delivered to that chat — just produce the content directly.%s",
+				job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo, linked,
 			)
 		} else {
 			extraPrompt = fmt.Sprintf(
@@ -160,9 +167,79 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 // resolveCronPeerKind infers peer kind from the cron job's user ID.
 // Group cron jobs have userID prefixed with "group:" or "guild:" (set during job creation).
+// Telegram supergroups/channels use negative chat IDs starting with -100 — treat as group when
+// deliver target looks like one (API-created jobs may omit group-scoped user IDs).
 func resolveCronPeerKind(job *store.CronJob) string {
 	if strings.HasPrefix(job.UserID, "group:") || strings.HasPrefix(job.UserID, "guild:") {
 		return "group"
 	}
+	if strings.HasPrefix(job.DeliverTo, "-100") {
+		return "group"
+	}
 	return ""
+}
+
+const (
+	linkedChatMaxMessages    = 35
+	linkedChatMaxCharsPerMsg = 2500
+	linkedChatMaxTotalBytes  = 48 * 1024
+)
+
+// linkedDeliveryChatContextBlock returns text to append to the cron extra system prompt:
+// recent messages from the delivery chat's normal session (where @mentions and worklogs land).
+// Empty string if there is no history or session store.
+func linkedDeliveryChatContextBlock(ctx context.Context, sessionMgr store.SessionStore, agentID string, job *store.CronJob, peerKind string) string {
+	if sessionMgr == nil || job.DeliverChannel == "" || job.DeliverTo == "" {
+		return ""
+	}
+	var pk sessions.PeerKind
+	if peerKind == "group" {
+		pk = sessions.PeerGroup
+	} else {
+		pk = sessions.PeerDirect
+	}
+	chatKey := sessions.BuildScopedSessionKey(agentID, job.DeliverChannel, pk, job.DeliverTo)
+	history := sessionMgr.GetHistory(ctx, chatKey)
+	if len(history) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n[Recent messages from this chat session — session_key ")
+	b.WriteString(chatKey)
+	b.WriteString("]\n")
+	// Same visibility rules as sessions_history (no raw tool I/O).
+	var lines []string
+	for _, m := range history {
+		if m.Role == "tool" {
+			continue
+		}
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 && strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		content := strings.TrimSpace(m.Content)
+		if content == "" {
+			continue
+		}
+		if utf8.RuneCountInString(content) > linkedChatMaxCharsPerMsg {
+			runes := []rune(content)
+			content = string(runes[:linkedChatMaxCharsPerMsg]) + "... [truncated]"
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", m.Role, content))
+	}
+	if len(lines) > linkedChatMaxMessages {
+		lines = lines[len(lines)-linkedChatMaxMessages:]
+	}
+	for _, line := range lines {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	out := b.String()
+	if len(out) > linkedChatMaxTotalBytes {
+		out = out[:linkedChatMaxTotalBytes]
+		for len(out) > 0 && !utf8.ValidString(out) {
+			out = out[:len(out)-1]
+		}
+		out += "\n... [chat context truncated]"
+	}
+	return out
 }

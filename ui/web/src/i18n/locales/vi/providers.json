@@ -184,6 +184,24 @@
     "runOnServer": "Chạy trên terminal máy chủ:",
     "recheckButton": "Kiểm tra lại"
   },
+  "cursor": {
+    "description": "Cursor CLI sử dụng tệp nhị phân",
+    "descriptionSuffix": "cục bộ của bạn. Không cần API key.",
+    "checkingAuth": "Đang kiểm tra xác thực...",
+    "authenticated": "Đã xác thực",
+    "authenticatedAs": "Đã xác thực là",
+    "notAuthenticated": "Chưa xác thực",
+    "runOnServer": "Chạy trên terminal máy chủ:",
+    "recheckButton": "Kiểm tra lại",
+    "mode": "Chế độ làm việc",
+    "modeAgent": "Agent",
+    "modePlan": "Kế hoạch",
+    "modeAsk": "Hỏi đáp",
+    "modeHint": "Agent: truy cập công cụ đầy đủ. Plan: lập kế hoạch chỉ đọc. Ask: hỏi đáp không chỉnh sửa.",
+    "apiKey": "CURSOR_AGENTS_API_KEY",
+    "apiKeyPlaceholder": "Tùy chọn — để trống nếu Cursor đã xác thực",
+    "apiKeyHint": "Đặt biến môi trường này nếu Cursor CLI chưa xác thực"
+  },
   "detail": {
     "advanced": "Nâng cao",
     "identity": "Danh tính",
@@ -194,6 +212,8 @@
     "acpConfigDesc": "Cài đặt tiến trình con agent",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "Xác thực CLI cục bộ",
+    "cursorCliConfig": "Cursor CLI",
+    "cursorCliConfigDesc": "Xác thực Cursor CLI cục bộ",
     "oauthConfig": "ChatGPT Subscription (OAuth)",
     "oauthConfigDesc": "Quản lý đăng nhập cho tài khoản OpenAI/Codex có bí danh này",
     "nameReadonly": "Định danh provider, không thể thay đổi",

@@ -202,6 +202,24 @@
     "runOnServer": "在服务器终端运行：",
     "recheckButton": "重新检查"
   },
+  "cursor": {
+    "description": "Cursor CLI 使用本地",
+    "descriptionSuffix": "二进制文件。无需 API 密钥。",
+    "checkingAuth": "正在检查认证...",
+    "authenticated": "已认证",
+    "authenticatedAs": "已认证为",
+    "notAuthenticated": "未认证",
+    "runOnServer": "在服务器终端运行：",
+    "recheckButton": "重新检查",
+    "mode": "工作模式",
+    "modeAgent": "Agent",
+    "modePlan": "规划",
+    "modeAsk": "问答",
+    "modeHint": "Agent：完整工具访问。Plan：只读规划。Ask：不修改的问答。",
+    "apiKey": "CURSOR_AGENTS_API_KEY",
+    "apiKeyPlaceholder": "可选 — 如已验证则留空",
+    "apiKeyHint": "如果 Cursor CLI 尚未验证，请设置此环境变量"
+  },
   "detail": {
     "advanced": "高级设置",
     "identity": "身份",
@@ -212,6 +230,8 @@
     "acpConfigDesc": "Agent子进程设置",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "本地CLI认证",
+    "cursorCliConfig": "Cursor CLI",
+    "cursorCliConfigDesc": "本地 Cursor CLI 认证",
     "oauthConfig": "ChatGPT Subscription (OAuth)",
     "oauthConfigDesc": "管理这个具名 OpenAI/Codex 账户的登录状态",
     "nameReadonly": "Provider标识符，无法更改",

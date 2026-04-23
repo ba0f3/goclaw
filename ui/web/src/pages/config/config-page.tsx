@@ -20,6 +20,7 @@ import { ShellSecuritySection } from "./sections/shell-security-section";
 import { TtsSection } from "./sections/tts-section";
 import { CronSection } from "./sections/cron-section";
 import { TelemetrySection } from "./sections/telemetry-section";
+import { ModelPricingSection } from "./sections/model-pricing-section";
 import { BindingsSection } from "./sections/bindings-section";
 
 export function ConfigPage() {
@@ -98,6 +99,7 @@ export function ConfigPage() {
           <TabsTrigger value="quota">{t("tabs.quota")}</TabsTrigger>
           <TabsTrigger value="tools">{t("tabs.tools")}</TabsTrigger>
           <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>
+          <TabsTrigger value="modelPricing">{t("tabs.modelPricing")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="server" className="space-y-4">
@@ -166,6 +168,14 @@ export function ConfigPage() {
           <BindingsSection
             data={config.bindings as any}
             onSave={(v) => patch({ bindings: v })}
+            saving={saving}
+          />
+        </TabsContent>
+
+        <TabsContent value="modelPricing" className="space-y-4">
+          <ModelPricingSection
+            data={config.telemetry as any}
+            onSave={(v) => patch({ telemetry: v })}
             saving={saving}
           />
         </TabsContent>
