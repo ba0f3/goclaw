@@ -27,12 +27,13 @@ func CheckDockerAvailable(ctx context.Context) error {
 
 // DockerSandbox is a sandbox backed by a Docker container.
 type DockerSandbox struct {
-	containerID string
-	config      Config
-	workspace   string
-	createdAt   time.Time
-	lastUsed    time.Time
-	mu          sync.Mutex // protects lastUsed
+	containerID   string
+	config        Config
+	workspace     string
+	teamWorkspace string
+	createdAt     time.Time
+	lastUsed      time.Time
+	mu            sync.Mutex // protects lastUsed
 }
 
 // newDockerSandbox creates and starts a Docker container for sandboxed execution.
@@ -97,6 +98,14 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 		}
 		hostPath := resolveHostWorkspacePath(ctx, workspace)
 		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, containerWorkdir, mountOpt))
+	}
+	if cfg.TeamWorkspace != "" && cfg.WorkspaceAccess != AccessNone {
+		mountOpt := "rw"
+		if cfg.WorkspaceAccess == AccessRO {
+			mountOpt = "ro"
+		}
+		hostPath := resolveHostWorkspacePath(ctx, cfg.TeamWorkspace)
+		args = append(args, "-v", fmt.Sprintf("%s:/team-workspace:%s", hostPath, mountOpt))
 	}
 	args = append(args, "-w", containerWorkdir)
 
@@ -269,13 +278,21 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	}
 
 	resolved := dockerResolvedWorkspaceBind(ctx, cfg, workspace)
+	teamResolved := ""
+	if cfg.TeamWorkspace != "" && cfg.WorkspaceAccess != AccessNone {
+		teamResolved = resolveHostWorkspacePath(ctx, cfg.TeamWorkspace)
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if sb, ok := m.sandboxes[key]; ok {
 		oldResolved := dockerResolvedWorkspaceBind(ctx, sb.config, sb.workspace)
-		if oldResolved == resolved {
+		oldTeamResolved := ""
+		if sb.config.TeamWorkspace != "" && sb.config.WorkspaceAccess != AccessNone {
+			oldTeamResolved = resolveHostWorkspacePath(ctx, sb.config.TeamWorkspace)
+		}
+		if oldResolved == resolved && oldTeamResolved == teamResolved {
 			return sb, nil
 		}
 		delete(m.sandboxes, key)
