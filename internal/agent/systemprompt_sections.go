@@ -693,6 +693,11 @@ func buildTeamWorkspaceSection(teamWsPath string) []string {
 		"All team files visible to all members. When delegating, members can ONLY access team workspace files.",
 		"Default workspace (relative paths) = personal. Files in task descriptions auto-copied to team workspace.",
 		"",
+	}
+}
+
+func buildTeamAutoStatusSection() []string {
+	return []string{
 		"## Auto-Status Updates",
 		"[Auto-status] messages are informational — relay naturally. Do NOT create, retry, or reassign tasks from them.",
 		"",

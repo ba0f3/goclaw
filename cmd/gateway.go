@@ -338,6 +338,16 @@ func runGateway() {
 	// Wire dependencies for system prompt preview parity.
 	if agentsH != nil {
 		agentsH.SetPreviewDeps(toolsReg, skillsLoader)
+		sandboxEnabled := false
+		sandboxContainerDir := ""
+		sandboxWorkspaceAccess := ""
+		if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil && sbCfg.Mode != "" && sbCfg.Mode != "off" {
+			resolved := sbCfg.ToSandboxConfig()
+			sandboxEnabled = true
+			sandboxContainerDir = resolved.ContainerWorkdir()
+			sandboxWorkspaceAccess = string(resolved.WorkspaceAccess)
+		}
+		agentsH.SetPreviewSandboxDefaults(sandboxEnabled, sandboxContainerDir, sandboxWorkspaceAccess)
 		var skillAccess store.SkillAccessStore
 		if pgStores.Skills != nil {
 			skillAccess, _ = pgStores.Skills.(store.SkillAccessStore)

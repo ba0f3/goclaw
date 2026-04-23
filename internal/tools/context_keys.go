@@ -705,14 +705,6 @@ func SandboxConfigFromCtx(ctx context.Context) *sandbox.Config {
 	} else if rc := store.RunContextFromCtx(ctx); rc != nil {
 		cfg = rc.SandboxCfg
 	}
-	if cfg == nil {
-		return nil
-	}
-	if teamWs := ToolTeamWorkspaceFromCtx(ctx); teamWs != "" && cfg.TeamWorkspace != teamWs {
-		copy := *cfg
-		copy.TeamWorkspace = teamWs
-		return &copy
-	}
 	return cfg
 }
 

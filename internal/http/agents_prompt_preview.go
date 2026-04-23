@@ -60,6 +60,9 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 		SkillsLoader:     h.skillsLoader,
 		SkillAccessStore: h.skillAccessStore,
 		DataDir:          h.dataDir,
+		SandboxEnabled:   h.sandboxEnabled,
+		SandboxContainerDir: h.sandboxDir,
+		SandboxWorkspaceAccess: h.sandboxAccess,
 	})
 
 	counter := tokencount.NewFallbackCounter()

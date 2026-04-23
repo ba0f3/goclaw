@@ -42,6 +42,9 @@ type AgentsHandler struct {
 	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
 	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
 	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
+	sandboxEnabled   bool                     // global sandbox default for prompt preview parity
+	sandboxDir       string                   // global sandbox container workdir for prompt preview parity
+	sandboxAccess    string                   // global sandbox workspace_access for prompt preview parity
 	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
 	summoner         *AgentSummoner           // LLM-based agent setup (nil = disabled)
 	isOwner          func(string) bool        // checks if user ID is a system owner (nil = no owners configured)
@@ -66,6 +69,13 @@ func NewAgentsHandler(agents store.AgentStore, providers store.ProviderStore, pr
 // SetDataDir sets the resolved data directory used for team workspace paths.
 func (h *AgentsHandler) SetDataDir(dataDir string) {
 	h.dataDir = dataDir
+}
+
+// SetPreviewSandboxDefaults sets global sandbox defaults for preview parity.
+func (h *AgentsHandler) SetPreviewSandboxDefaults(enabled bool, containerDir, workspaceAccess string) {
+	h.sandboxEnabled = enabled
+	h.sandboxDir = containerDir
+	h.sandboxAccess = workspaceAccess
 }
 
 // SetImportStores attaches optional stores needed for agent import.

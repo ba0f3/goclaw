@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -15,9 +16,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -289,6 +290,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 				slog.Warn("failed to create agent workspace directory", "workspace", workspace, "agent", agentKey, "error", err)
 			}
 		}
+		if sandboxCfgOverride != nil {
+			sandboxCfgOverride.ReadOnlyHostPaths = buildSandboxReadOnlyHostPaths(deps.DataDir, ag.TenantID, tenantSlug, workspace)
+		}
 
 		toolsReg := deps.Tools
 
@@ -467,7 +471,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			AgentOtherConfig:       ag.OtherConfig,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
-			AutoInjector:          deps.AutoInjector,
+			AutoInjector:           deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ModelRegistry:          deps.ModelRegistry,
@@ -607,4 +611,52 @@ func derefInt(p *int) int {
 		return 0
 	}
 	return *p
+}
+
+func buildSandboxReadOnlyHostPaths(dataDir string, tenantID uuid.UUID, tenantSlug, workspaceRoot string) []string {
+	candidates := make([]string, 0, 4)
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		candidates = append(candidates,
+			filepath.Join(homeDir, ".goclaw", "skills"),
+			filepath.Join(homeDir, ".agents", "skills"),
+		)
+	}
+	if dataDir != "" {
+		candidates = append(candidates,
+			filepath.Join(dataDir, "skills-store"),
+			config.TenantSkillsStoreDir(dataDir, tenantID, tenantSlug),
+		)
+	}
+	root := filepath.Clean(workspaceRoot)
+	seen := make(map[string]struct{}, len(candidates))
+	for _, raw := range candidates {
+		p := filepath.Clean(raw)
+		if p == "" || p == "." {
+			continue
+		}
+		if !filepath.IsAbs(p) {
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				continue
+			}
+			p = abs
+		}
+		fi, err := os.Stat(p)
+		if err != nil || !fi.IsDir() {
+			continue
+		}
+		if root != "" && (p == root || strings.HasPrefix(p+string(filepath.Separator), root+string(filepath.Separator))) {
+			continue
+		}
+		seen[p] = struct{}{}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
 }

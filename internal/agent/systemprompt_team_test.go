@@ -119,6 +119,23 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 			wantNotIn: []string{"Sub-Agent Spawning"},
 		},
 		{
+			name: "team context in sandbox — hide team workspace section",
+			cfg: SystemPromptConfig{
+				IsTeamContext:       true,
+				HasSpawn:            false,
+				ToolNames:           []string{"team_tasks", "read_file"},
+				TeamWorkspace:       "/home/tui/.goclaw/workspace/teams/t1/52007861",
+				Workspace:           "/home/tui/.goclaw/workspace/teams/t1/52007861",
+				SandboxEnabled:      true,
+				SandboxContainerDir: "/workspace",
+				TeamMembers:         teamMembers,
+				ContextFiles:        []bootstrap.ContextFile{teamMD},
+				AgentType:           store.AgentTypePredefined,
+			},
+			wantIn:    []string{"## Workspace", "Your working directory is: /workspace", "Team Members", "Auto-Status Updates"},
+			wantNotIn: []string{"Team Shared Workspace"},
+		},
+		{
 			name: "member-only with spawn — spawn guidance present",
 			cfg: SystemPromptConfig{
 				IsTeamContext: false,

@@ -32,7 +32,10 @@ type PreviewDeps struct {
 		BuildPinnedSummary(ctx context.Context, names []string) string
 		BuildSummary(ctx context.Context, allowList []string) string
 	}
-	DataDir string // for team workspace path construction
+	DataDir                string // for team workspace path construction
+	SandboxEnabled         bool
+	SandboxContainerDir    string
+	SandboxWorkspaceAccess string
 }
 
 // PreviewResult holds the output of BuildPreviewPrompt.
@@ -135,10 +138,17 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 	}
 
 	// --- Sandbox ---
-	sandboxCfg := ag.ParseSandboxConfig()
-	sandboxEnabled := sandboxCfg != nil && sandboxCfg.Mode != "" && sandboxCfg.Mode != "off"
-	var sandboxContainerDir string
-	if sandboxEnabled {
+	// Match resolver semantics: start from global defaults, then apply per-agent override.
+	sandboxEnabled := deps.SandboxEnabled
+	sandboxContainerDir := deps.SandboxContainerDir
+	sandboxWorkspaceAccess := deps.SandboxWorkspaceAccess
+	if sandboxCfg := ag.ParseSandboxConfig(); sandboxCfg != nil {
+		resolved := sandboxCfg.ToSandboxConfig()
+		sandboxEnabled = strings.TrimSpace(sandboxCfg.Mode) != "" && sandboxCfg.Mode != "off"
+		sandboxContainerDir = resolved.ContainerWorkdir()
+		sandboxWorkspaceAccess = string(resolved.WorkspaceAccess)
+	}
+	if sandboxEnabled && sandboxContainerDir == "" {
 		sandboxContainerDir = "/workspace"
 	}
 
@@ -266,6 +276,7 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 		ShellDenyGroups:      ag.ParseShellDenyGroups(),
 		SandboxEnabled:       sandboxEnabled,
 		SandboxContainerDir:  sandboxContainerDir,
+		SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 		PinnedSkillsSummary:  pinnedSummary,
 		SkillsSummary:        skillsSummary,
 		MCPToolDescs:         mcpToolDescs,

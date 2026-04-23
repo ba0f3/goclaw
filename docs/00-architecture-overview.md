@@ -4,6 +4,8 @@
 
 GoClaw is an AI agent gateway written in Go. It exposes a WebSocket RPC (v3) interface and an OpenAI-compatible HTTP API for orchestrating LLM-powered agents. The system uses PostgreSQL as its storage backend with full multi-tenant isolation, per-user context files, encrypted credentials, agent delegation, teams, and LLM call tracing.
 
+For workspace path resolution, sandbox mount behavior, and privacy boundaries, see [`workspace-sandbox-and-privacy.md`](./workspace-sandbox-and-privacy.md).
+
 ## 2. Component Diagram
 
 ```mermaid
