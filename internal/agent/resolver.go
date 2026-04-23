@@ -62,6 +62,7 @@ type ResolverDeps struct {
 	SandboxContainerDir    string
 	SandboxWorkspaceAccess string
 	SandboxBackend         string
+	DefaultSandboxConfig   *sandbox.Config
 
 	// Inter-agent delegation
 	AgentLinkStore store.AgentLinkStore
@@ -256,6 +257,13 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		sandboxWorkspaceAccess := deps.SandboxWorkspaceAccess
 		sandboxBackend := deps.SandboxBackend
 		var sandboxCfgOverride *sandbox.Config
+		if deps.DefaultSandboxConfig != nil {
+			copy := *deps.DefaultSandboxConfig
+			sandboxCfgOverride = &copy
+			sandboxContainerDir = copy.ContainerWorkdir()
+			sandboxWorkspaceAccess = string(copy.WorkspaceAccess)
+			sandboxBackend = string(copy.Backend)
+		}
 		if c := ag.ParseSandboxConfig(); c != nil {
 			resolved := c.ToSandboxConfig()
 			sandboxContainerDir = resolved.ContainerWorkdir()

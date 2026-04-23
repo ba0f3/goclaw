@@ -117,6 +117,7 @@ func wireExtras(
 	sandboxContainerDir := ""
 	sandboxWorkspaceAccess := ""
 	sandboxBackend := ""
+	var defaultSandboxCfg *sandbox.Config
 	if sandboxEnabled {
 		sbCfg := appCfg.Agents.Defaults.Sandbox
 		if sbCfg != nil {
@@ -124,6 +125,7 @@ func wireExtras(
 			sandboxContainerDir = resolved.ContainerWorkdir()
 			sandboxWorkspaceAccess = string(resolved.WorkspaceAccess)
 			sandboxBackend = string(resolved.Backend)
+			defaultSandboxCfg = &resolved
 		}
 	}
 
@@ -219,6 +221,7 @@ func wireExtras(
 		SandboxContainerDir:    sandboxContainerDir,
 		SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 		SandboxBackend:         sandboxBackend,
+		DefaultSandboxConfig:   defaultSandboxCfg,
 		AgentLinkStore:         stores.AgentLinks,
 		TeamStore:              stores.Teams,
 		DataDir:                workspace,
