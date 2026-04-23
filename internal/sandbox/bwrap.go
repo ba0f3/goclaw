@@ -1,3 +1,10 @@
+// Package sandbox bubblewrap backend uses Linux namespaces (pid, ipc, uts, net)
+// for lightweight isolation. Unlike Docker, bwrap shares the host kernel and
+// UID space — there is no UID mapping. Processes inside the sandbox run with
+// the same UID as the host caller. The environment is sanitized (not inherited
+// from host) to prevent credential leakage. System directories are read-only
+// binds; /tmp and /var are tmpfs for isolation. Resource limits (memory, CPU,
+// pids) require systemd-run --scope and will not be enforced if unavailable.
 package sandbox
 
 import (
@@ -18,6 +25,19 @@ const (
 	bwrapBin      = "/usr/bin/bwrap"
 	systemdRunBin = "/usr/bin/systemd-run"
 )
+
+// minimalBwrapEnv returns a small, safe environment for sandboxed processes.
+// Does NOT inherit the host environment to prevent credential leakage.
+func minimalBwrapEnv(containerWorkdir string) []string {
+	return []string{
+		"PATH=/usr/local/bin:/usr/bin:/bin",
+		"HOME=" + containerWorkdir,
+		"USER=sandbox",
+		"TMPDIR=/tmp",
+		"LANG=C.UTF-8",
+		"TERM=xterm-256color",
+	}
+}
 
 // CheckBwrapAvailable verifies only that the bubblewrap binary exists and is executable.
 // Resource limits (memory/CPU/pids) require systemd-run --scope when available; see probeSystemdRunScope.
@@ -110,7 +130,7 @@ func (s *BwrapSandbox) Exec(ctx context.Context, command []string, workDir strin
 		cmd = exec.CommandContext(execCtx, bwrapBin, bwrapArgs...)
 	}
 
-	cmd.Env = mergeSandboxEnv(os.Environ(), o.Env)
+	cmd.Env = mergeSandboxEnv(minimalBwrapEnv(s.config.ContainerWorkdir()), o.Env)
 	if len(o.Stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(o.Stdin)
 	}
@@ -174,7 +194,7 @@ func buildBwrapArgs(cfg Config, resolvedHostWS string) []string {
 		args = append(args, "--ro-bind", "/lib64", "/lib64")
 	}
 	args = append(args,
-		"--ro-bind", "/var", "/var",
+		"--tmpfs", "/var",
 		"--tmpfs", "/tmp",
 		"--proc", "/proc",
 		"--dev", "/dev",
