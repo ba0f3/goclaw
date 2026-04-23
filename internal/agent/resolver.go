@@ -301,6 +301,14 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 				slog.Warn("failed to create agent workspace directory", "workspace", workspace, "agent", agentKey, "error", err)
 			}
 		}
+		if sandboxCfgOverride == nil && sandboxEnabled {
+			defaultCfg := sandbox.DefaultConfig()
+			defaultCfg.Mode = sandbox.ModeAll
+			defaultCfg.Workdir = sandboxContainerDir
+			defaultCfg.WorkspaceAccess = sandbox.Access(sandboxWorkspaceAccess)
+			defaultCfg.Backend = sandbox.BackendType(sandboxBackend)
+			sandboxCfgOverride = &defaultCfg
+		}
 		if sandboxCfgOverride != nil {
 			sandboxCfgOverride.ReadOnlyHostPaths = buildSandboxReadOnlyHostPaths(deps.DataDir, ag.TenantID, tenantSlug, workspace)
 		}
