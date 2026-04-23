@@ -61,6 +61,7 @@ type ResolverDeps struct {
 	SandboxEnabled         bool
 	SandboxContainerDir    string
 	SandboxWorkspaceAccess string
+	SandboxBackend         string
 
 	// Inter-agent delegation
 	AgentLinkStore store.AgentLinkStore
@@ -253,11 +254,13 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		sandboxEnabled := deps.SandboxEnabled
 		sandboxContainerDir := deps.SandboxContainerDir
 		sandboxWorkspaceAccess := deps.SandboxWorkspaceAccess
+		sandboxBackend := deps.SandboxBackend
 		var sandboxCfgOverride *sandbox.Config
 		if c := ag.ParseSandboxConfig(); c != nil {
 			resolved := c.ToSandboxConfig()
 			sandboxContainerDir = resolved.ContainerWorkdir()
 			sandboxWorkspaceAccess = string(resolved.WorkspaceAccess)
+			sandboxBackend = string(resolved.Backend)
 			sandboxCfgOverride = &resolved
 		}
 
@@ -510,6 +513,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SandboxEnabled:         sandboxEnabled,
 			SandboxContainerDir:    sandboxContainerDir,
 			SandboxWorkspaceAccess: sandboxWorkspaceAccess,
+			SandboxBackend:         sandboxBackend,
 			BuiltinToolSettings:    builtinSettings,
 			TenantToolSettings:     tenantToolSettings,
 			TenantAllowedPaths:     tenantAllowedPaths,

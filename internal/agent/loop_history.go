@@ -230,6 +230,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		SandboxEnabled:         l.sandboxEnabled,
 		SandboxContainerDir:    l.sandboxContainerDir,
 		SandboxWorkspaceAccess: l.sandboxWorkspaceAccess,
+		SandboxBackend:         l.sandboxBackend,
 		ShellDenyGroups:        l.shellDenyGroups,
 		SelfEvolve:             l.selfEvolve,
 		TTSAutoMode:            l.ttsAutoMode,

@@ -165,3 +165,40 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildSystemPrompt_SandboxBackendWording(t *testing.T) {
+	t.Run("docker backend wording", func(t *testing.T) {
+		prompt := BuildSystemPrompt(SystemPromptConfig{
+			SandboxEnabled:      true,
+			SandboxBackend:      "docker",
+			SandboxContainerDir: "/workspace",
+			ToolNames:           []string{"exec", "read_file"},
+			Mode:                PromptFull,
+		})
+		if !strings.Contains(prompt, "tools execute in Docker") {
+			t.Fatalf("expected Docker wording in sandbox section")
+		}
+		if !strings.Contains(prompt, "inside a Docker sandbox automatically") {
+			t.Fatalf("expected Docker wording in tooling section")
+		}
+	})
+
+	t.Run("bwrap backend wording", func(t *testing.T) {
+		prompt := BuildSystemPrompt(SystemPromptConfig{
+			SandboxEnabled:      true,
+			SandboxBackend:      "bwrap",
+			SandboxContainerDir: "/workspace",
+			ToolNames:           []string{"exec", "read_file"},
+			Mode:                PromptFull,
+		})
+		if !strings.Contains(prompt, "tools execute in bubblewrap namespace") {
+			t.Fatalf("expected bubblewrap wording in sandbox section")
+		}
+		if !strings.Contains(prompt, "inside a bubblewrap namespace sandbox automatically") {
+			t.Fatalf("expected bubblewrap wording in tooling section")
+		}
+		if strings.Contains(prompt, "inside a Docker sandbox automatically") {
+			t.Fatalf("did not expect Docker wording for bwrap backend")
+		}
+	})
+}

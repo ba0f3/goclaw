@@ -126,9 +126,10 @@ type SystemPromptConfig struct {
 	MCPToolDescs        map[string]string // MCP tool name → description (inline mode only)
 
 	// Sandbox info — matching TS sandboxInfo in system-prompt.ts
-	SandboxEnabled         bool   // exec tool runs inside Docker sandbox?
+	SandboxEnabled         bool   // exec tool runs inside sandbox runtime?
 	SandboxContainerDir    string // container-side workdir (e.g. "/workspace")
 	SandboxWorkspaceAccess string // "none", "ro", "rw"
+	SandboxBackend         string // "docker", "bwrap", or empty when unknown
 
 	// ProviderType identifies the LLM provider (e.g. "openai", "anthropic", "codex").
 	// Used for provider-specific prompt adjustments (e.g. SOUL echo for GPT models).
@@ -336,7 +337,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	}
 
 	// 2. ## Tooling
-	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.ShellDenyGroups)...)
+	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.SandboxBackend, cfg.ShellDenyGroups)...)
 
 	// 2.1. ## Execution Bias — full + task mode (overridable by provider)
 	if (isFull || isTask) && !cfg.IsBootstrap {
@@ -545,7 +546,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 // --- Section builders ---
 
-func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups map[string]bool) []string {
+func buildToolingSection(toolNames []string, hasSandbox bool, sandboxBackend string, shellDenyGroups map[string]bool) []string {
 	lines := []string{
 		"## Tooling",
 		"",
@@ -570,12 +571,13 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 	}
 
 	if hasSandbox {
+		runtime := sandboxRuntimeLabel(sandboxBackend)
 		lines = append(lines,
 			"",
-			"NOTE: The `exec` tool runs commands inside a Docker sandbox container automatically.",
-			"You do NOT need to use `docker run` or `docker exec` — just run commands directly (e.g. `python3 script.py`).",
+			fmt.Sprintf("NOTE: The `exec` tool runs commands inside a %s sandbox automatically.", runtime),
+			"Do NOT start nested sandboxes/containers inside exec — just run commands directly (e.g. `python3 script.py`).",
 			"The sandbox has: bash, python3, git, curl, jq, ripgrep.",
-			"Do NOT attempt to install Docker or run Docker commands inside exec.",
+			"Do NOT attempt to install container runtimes or run container commands inside exec.",
 		)
 	}
 
@@ -614,6 +616,17 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		"",
 	)
 	return lines
+}
+
+func sandboxRuntimeLabel(backend string) string {
+	switch strings.ToLower(strings.TrimSpace(backend)) {
+	case "docker":
+		return "Docker"
+	case "bwrap":
+		return "bubblewrap namespace"
+	default:
+		return "sandboxed runtime"
+	}
 }
 
 func buildSafetySection() []string {

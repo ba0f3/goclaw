@@ -193,10 +193,11 @@ func buildSkillsHybridSection(pinnedSummary string, hasSearch, hasManage bool) [
 
 // buildSandboxSection creates the "## Sandbox" section matching TS system-prompt.ts lines 476-519.
 func buildSandboxSection(cfg SystemPromptConfig) []string {
+	runtime := sandboxRuntimeLabel(cfg.SandboxBackend)
 	lines := []string{
 		"## Sandbox",
 		"",
-		"You are running in a sandboxed runtime (tools execute in Docker).",
+		fmt.Sprintf("You are running in a sandboxed runtime (tools execute in %s).", runtime),
 		"Some tools may be unavailable due to sandbox policy.",
 		"Sub-agents stay sandboxed (no elevated/host access). Need outside-sandbox read/write? Don't spawn; ask first.",
 	}

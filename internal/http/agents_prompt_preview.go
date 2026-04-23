@@ -19,11 +19,11 @@ type promptPreviewSection struct {
 
 // promptPreviewResponse is the API response for system prompt preview.
 type promptPreviewResponse struct {
-	Mode       string                      `json:"mode"`
-	Prompt     string                      `json:"prompt"`
-	TokenCount int                         `json:"token_count"`
-	Sections   []promptPreviewSection      `json:"sections"`
-	Tools      []providers.ToolDefinition  `json:"tools,omitempty"`
+	Mode       string                     `json:"mode"`
+	Prompt     string                     `json:"prompt"`
+	TokenCount int                        `json:"token_count"`
+	Sections   []promptPreviewSection     `json:"sections"`
+	Tools      []providers.ToolDefinition `json:"tools,omitempty"`
 }
 
 // handleSystemPromptPreview renders the actual system prompt for an agent in a given mode.
@@ -52,17 +52,18 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 	// Runtime-only fields (channel, peer kind, credentials) are zero-valued;
 	// BuildSystemPrompt nil-checks every field so these sections are simply skipped.
 	result := agent.BuildPreviewPrompt(ctx, ag, mode, r.URL.Query().Get("user_id"), agent.PreviewDeps{
-		AgentStore:       h.agents,
-		TeamStore:        h.teamStore,
-		AgentLinks:       h.agentLinkStore,
-		ProviderReg:      h.providerReg,
-		ToolLister:       h.toolsReg,
-		SkillsLoader:     h.skillsLoader,
-		SkillAccessStore: h.skillAccessStore,
-		DataDir:          h.dataDir,
-		SandboxEnabled:   h.sandboxEnabled,
-		SandboxContainerDir: h.sandboxDir,
+		AgentStore:             h.agents,
+		TeamStore:              h.teamStore,
+		AgentLinks:             h.agentLinkStore,
+		ProviderReg:            h.providerReg,
+		ToolLister:             h.toolsReg,
+		SkillsLoader:           h.skillsLoader,
+		SkillAccessStore:       h.skillAccessStore,
+		DataDir:                h.dataDir,
+		SandboxEnabled:         h.sandboxEnabled,
+		SandboxContainerDir:    h.sandboxDir,
 		SandboxWorkspaceAccess: h.sandboxAccess,
+		SandboxBackend:         h.sandboxBackend,
 	})
 
 	counter := tokencount.NewFallbackCounter()
