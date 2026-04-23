@@ -4,10 +4,14 @@ import "strings"
 
 // --- Hint messages for LLM consumption ---
 
-const hintBinaryNotFound = "\n\n[SANDBOX] This command ran inside a Docker sandbox container. " +
+const hintBinaryNotFound = "\n\n[SANDBOX] This command ran inside a sandbox container/runtime. " +
 	"The required tool/binary is not installed in the sandbox image. " +
 	"Tell the user this failed due to sandbox environment limitations — " +
 	"they can install the binary in the sandbox image or disable sandbox mode for this agent."
+
+const hintBwrapUsernsDenied = "\n\n[SANDBOX] Bubblewrap failed to create user namespace (uid/gid map permission denied). " +
+	"This host/runtime likely blocks unprivileged user namespaces. " +
+	"Tell the user to enable user namespaces on the host, switch sandbox backend to Docker, or disable sandbox for this agent."
 
 const hintPermissionDenied = "\n\n[SANDBOX] Permission denied inside sandbox container. " +
 	"The workspace may be mounted as read-only (workspace_access: ro). " +
@@ -46,6 +50,13 @@ func isPermissionDenied(output string) bool {
 	return strings.Contains(lower, "permission denied") || strings.Contains(lower, "eacces")
 }
 
+func isBwrapUsernsDenied(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "bwrap: setting up uid map") ||
+		strings.Contains(lower, "bwrap: setting up gid map") ||
+		(strings.Contains(lower, "uid map") && strings.Contains(lower, "permission denied"))
+}
+
 func isNetworkDisabled(output string) bool {
 	lower := strings.ToLower(output)
 	return strings.Contains(lower, "network is unreachable") ||
@@ -75,6 +86,9 @@ func isResourceLimit(output string) bool {
 func MaybeSandboxHint(exitCode int, output string) string {
 	if isBinaryNotFound(exitCode, output) {
 		return hintBinaryNotFound
+	}
+	if isBwrapUsernsDenied(output) {
+		return hintBwrapUsernsDenied
 	}
 	if isPermissionDenied(output) {
 		return hintPermissionDenied

@@ -45,6 +45,7 @@ func TestMaybeSandboxHint(t *testing.T) {
 		{"success no hint", 0, "ok", ""},
 		{"non-binary error no hint", 1, "segfault", ""},
 		{"sh pattern", 1, "sh: python3: not found", "not installed in the sandbox image"},
+		{"bwrap uid map denied", 1, "STDERR:\nbwrap: setting up uid map: Permission denied", "Bubblewrap failed to create user namespace"},
 		{"permission denied", 1, "bash: /workspace/file: Permission denied", "read-only"},
 		{"network unreachable", 1, "connect: Network is unreachable", "networking is disabled"},
 		{"dns failure", 1, "Temporary failure in name resolution", "networking is disabled"},
