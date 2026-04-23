@@ -73,19 +73,17 @@ type Config struct {
 	Env               map[string]string `json:"env,omitempty"`
 
 	// Security hardening (matching TS buildSandboxCreateArgs)
-	ReadOnlyRoot    bool     `json:"read_only_root"`
-	CapDrop         []string `json:"cap_drop,omitempty"`
-	Tmpfs           []string `json:"tmpfs,omitempty"`         // e.g. "/tmp", "/tmp:size=64m"
-	TmpfsSizeMB     int      `json:"tmpfs_size_mb,omitempty"` // default size for tmpfs mounts without explicit :size= (0 = Docker default)
-	PidsLimit       int      `json:"pids_limit,omitempty"`
-	User            string   `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
-	MaxOutputBytes  int      `json:"max_output_bytes,omitempty"` // limit exec stdout+stderr capture (default 1MB, 0 = unlimited)
-	SetupCommand    string   `json:"setup_command,omitempty"`
-	ContainerPrefix string   `json:"container_prefix,omitempty"`
-	Workdir         string   `json:"workdir,omitempty"` // container workdir (default "/workspace")
-
-	// Team workspace mount (additional to primary workspace)
-	TeamWorkspace string `json:"team_workspace,omitempty"`
+	ReadOnlyRoot      bool     `json:"read_only_root"`
+	CapDrop           []string `json:"cap_drop,omitempty"`
+	Tmpfs             []string `json:"tmpfs,omitempty"`         // e.g. "/tmp", "/tmp:size=64m"
+	TmpfsSizeMB       int      `json:"tmpfs_size_mb,omitempty"` // default size for tmpfs mounts without explicit :size= (0 = Docker default)
+	PidsLimit         int      `json:"pids_limit,omitempty"`
+	User              string   `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
+	MaxOutputBytes    int      `json:"max_output_bytes,omitempty"` // limit exec stdout+stderr capture (default 1MB, 0 = unlimited)
+	SetupCommand      string   `json:"setup_command,omitempty"`
+	ContainerPrefix   string   `json:"container_prefix,omitempty"`
+	Workdir           string   `json:"workdir,omitempty"`              // container workdir (default "/workspace")
+	ReadOnlyHostPaths []string `json:"read_only_host_paths,omitempty"` // extra host dirs mirrored read-only into sandbox at same absolute paths
 
 	// Pruning (matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)

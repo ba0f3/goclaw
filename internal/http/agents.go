@@ -35,16 +35,20 @@ type AgentsHandler struct {
 	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
 	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
 	vaultStore       store.VaultStore          // for vault import (nil = disabled)
-	toolsReg         ToolPreviewLister          // for system prompt preview tool resolution (nil = fallback)
-	skillsLoader     SkillPreviewBuilder        // for system prompt preview pinned skills (nil = skip)
-	skillAccessStore store.SkillAccessStore     // for system prompt preview skill filtering (nil = skip)
+	toolsReg         ToolPreviewLister         // for system prompt preview tool resolution (nil = fallback)
+	skillsLoader     SkillPreviewBuilder       // for system prompt preview pinned skills (nil = skip)
+	skillAccessStore store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
 	teamStore        store.TeamStore           // for system prompt preview team context (nil = skip)
 	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
-	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
-	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
-	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
-	summoner         *AgentSummoner           // LLM-based agent setup (nil = disabled)
-	isOwner          func(string) bool        // checks if user ID is a system owner (nil = no owners configured)
+	defaultWorkspace string                    // default workspace path template (e.g. "~/.goclaw/workspace")
+	dataDir          string                    // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
+	sandboxEnabled   bool                      // global sandbox default for prompt preview parity
+	sandboxDir       string                    // global sandbox container workdir for prompt preview parity
+	sandboxAccess    string                    // global sandbox workspace_access for prompt preview parity
+	sandboxBackend   string                    // global sandbox backend ("docker"|"bwrap") for prompt preview parity
+	msgBus           *bus.MessageBus           // for cache invalidation events (nil = no events)
+	summoner         *AgentSummoner            // LLM-based agent setup (nil = disabled)
+	isOwner          func(string) bool         // checks if user ID is a system owner (nil = no owners configured)
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -66,6 +70,14 @@ func NewAgentsHandler(agents store.AgentStore, providers store.ProviderStore, pr
 // SetDataDir sets the resolved data directory used for team workspace paths.
 func (h *AgentsHandler) SetDataDir(dataDir string) {
 	h.dataDir = dataDir
+}
+
+// SetPreviewSandboxDefaults sets global sandbox defaults for preview parity.
+func (h *AgentsHandler) SetPreviewSandboxDefaults(enabled bool, containerDir, workspaceAccess, backend string) {
+	h.sandboxEnabled = enabled
+	h.sandboxDir = containerDir
+	h.sandboxAccess = workspaceAccess
+	h.sandboxBackend = backend
 }
 
 // SetImportStores attaches optional stores needed for agent import.

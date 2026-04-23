@@ -213,16 +213,13 @@ func buildBwrapArgs(cfg Config, resolvedHostWS string) []string {
 		if resolvedHostWS != "" {
 			args = append(args, "--bind", resolvedHostWS, cw)
 		}
-		if cfg.TeamWorkspace != "" {
-			args = append(args, "--bind", cfg.TeamWorkspace, "/team-workspace")
-		}
 	case AccessRO:
 		if resolvedHostWS != "" {
 			args = append(args, "--ro-bind", resolvedHostWS, cw)
 		}
-		if cfg.TeamWorkspace != "" {
-			args = append(args, "--ro-bind", cfg.TeamWorkspace, "/team-workspace")
-		}
+	}
+	for _, p := range normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolvedHostWS) {
+		args = append(args, "--ro-bind", p, p)
 	}
 	return args
 }
@@ -300,19 +297,13 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 	if cfg.WorkspaceAccess != AccessNone && strings.TrimSpace(workspace) != "" {
 		resolved = resolveHostWorkspacePath(ctx, workspace)
 	}
-	var teamResolved string
-	if cfg.WorkspaceAccess != AccessNone && cfg.TeamWorkspace != "" {
-		teamResolved = resolveHostWorkspacePath(ctx, cfg.TeamWorkspace)
-	}
+	readOnlyKey := readOnlyHostPathsKey(cfg.ReadOnlyHostPaths, resolved)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if sb, ok := m.sandboxes[key]; ok {
-		oldTeamResolved := ""
-		if sb.config.WorkspaceAccess != AccessNone && sb.config.TeamWorkspace != "" {
-			oldTeamResolved = resolveHostWorkspacePath(ctx, sb.config.TeamWorkspace)
-		}
-		if sb.resolvedWorkspace == resolved && oldTeamResolved == teamResolved {
+		oldReadOnlyKey := readOnlyHostPathsKey(sb.config.ReadOnlyHostPaths, sb.resolvedWorkspace)
+		if sb.resolvedWorkspace == resolved && oldReadOnlyKey == readOnlyKey {
 			return sb, nil
 		}
 		delete(m.sandboxes, key)
@@ -325,7 +316,7 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 		cgroupViaSystemd:  m.cgroupViaSystemd,
 	}
 	m.sandboxes[key] = sb
-	slog.Debug("bwrap sandbox slot created", "key", key, "workspace_bind", resolved != "", "team_workspace_bind", teamResolved != "")
+	slog.Debug("bwrap sandbox slot created", "key", key, "workspace_bind", resolved != "", "read_only_host_paths", len(normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolved)))
 	return sb, nil
 }
 
