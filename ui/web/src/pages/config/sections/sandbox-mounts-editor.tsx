@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,9 +32,14 @@ export function SandboxMountsEditor({ value, onChange, disabled }: Props) {
     });
   };
 
-  const updateMount = (index: number, patch: Partial<ExtraMount>) => {
+  const updateMount = (
+    index: number,
+    patch: Partial<Pick<ExtraMount, "host_path" | "container_path" | "access">>,
+  ) => {
     const updated = [...extraMounts];
-    updated[index] = { ...updated[index], ...patch };
+    const current = updated[index];
+    if (!current) return;
+    updated[index] = { ...current, ...patch };
     onChange({ extra_mounts: updated });
   };
 
