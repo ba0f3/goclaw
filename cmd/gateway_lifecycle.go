@@ -117,6 +117,9 @@ func (d *gatewayDeps) runLifecycle(
 			d.agentRouter.InvalidateAll()
 		}
 	})
+	// Reload global shell deny-group toggles on config changes via pub/sub
+	// so /config edits apply without a process restart.
+	subscribeShellDenyGroupsReload(d.msgBus, d.toolsReg)
 
 	// Reload TTS providers on config changes via pub/sub.
 	d.msgBus.Subscribe("tts-config-reload", func(evt bus.Event) {

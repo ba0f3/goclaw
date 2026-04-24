@@ -349,7 +349,11 @@ func (h *ProvidersHandler) handleListProviders(w http.ResponseWriter, r *http.Re
 		maskAPIKey(&providers[i])
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"providers": providers})
+	publicProviders := make([]store.LLMProviderData, 0, len(providers))
+	for i := range providers {
+		publicProviders = append(publicProviders, canonicalizeProviderForResponse(&providers[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": publicProviders})
 }
 
 func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.Request) {
@@ -435,7 +439,8 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 
 	emitAudit(h.msgBus, r, "provider.created", "provider", p.ID.String())
 	maskAPIKey(&p)
-	writeJSON(w, http.StatusCreated, p)
+	publicProvider := canonicalizeProviderForResponse(&p)
+	writeJSON(w, http.StatusCreated, publicProvider)
 }
 
 func (h *ProvidersHandler) handleGetProvider(w http.ResponseWriter, r *http.Request) {
@@ -453,7 +458,8 @@ func (h *ProvidersHandler) handleGetProvider(w http.ResponseWriter, r *http.Requ
 	}
 
 	maskAPIKey(p)
-	writeJSON(w, http.StatusOK, p)
+	publicProvider := canonicalizeProviderForResponse(p)
+	writeJSON(w, http.StatusOK, publicProvider)
 }
 
 func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {

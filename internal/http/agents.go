@@ -217,7 +217,11 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
+	publicAgents := make([]store.AgentData, 0, len(agents))
+	for i := range agents {
+		publicAgents = append(publicAgents, canonicalizeAgentForResponse(&agents[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agents": publicAgents})
 }
 
 func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -318,7 +322,8 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	emitAudit(h.msgBus, r, "agent.created", "agent", req.ID.String())
-	writeJSON(w, http.StatusCreated, req)
+	publicAgent := canonicalizeAgentForResponse(&req)
+	writeJSON(w, http.StatusCreated, publicAgent)
 }
 
 func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -340,7 +345,8 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		writeJSON(w, http.StatusOK, ag)
+		publicAgent := canonicalizeAgentForResponse(ag)
+		writeJSON(w, http.StatusOK, publicAgent)
 		return
 	}
 
@@ -357,7 +363,8 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, ag)
+	publicAgent := canonicalizeAgentForResponse(ag)
+	writeJSON(w, http.StatusOK, publicAgent)
 }
 
 func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
