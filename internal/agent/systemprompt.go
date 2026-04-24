@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -413,10 +412,10 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	lines = append(lines, buildWorkspaceSection(cfg.Workspace, cfg.SandboxEnabled, cfg.SandboxContainerDir)...)
 
 	// 6.3. ## Team Workspace — only when team context is active (leader inbound OR team dispatch).
-	// When sandboxed, Workspace already points to the single mounted root (/workspace),
-	// so a separate Team Shared Workspace section is redundant and can be misleading.
+	// With host-path sandbox mounting, both personal and team workspaces appear at the
+	// same absolute path inside the container, so the agent can use absolute paths consistently.
 	// None mode skips team sections entirely — identity-only prompt has no team awareness.
-	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && hasTeamWorkspace(cfg.ToolNames) && !cfg.SandboxEnabled {
+	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && hasTeamWorkspace(cfg.ToolNames) {
 		lines = append(lines, buildTeamWorkspaceSection(displayTeamWorkspacePath(
 			cfg.TeamWorkspace,
 			cfg.Workspace,
@@ -709,15 +708,11 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch, hasSkillManage boo
 }
 
 func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir string) []string {
-	// Matching TS intent: when sandboxed, display container workdir and keep guidance
-	// sandbox-centric (do not leak host path as primary file-tool base).
 	displayDir := workspace
 	slog.Debug("buildWorkspaceSection: workspace", "sandboxEnabled", sandboxEnabled, "containerDir", containerDir, "workspace", workspace)
 	guidance := "All file tool paths resolve relative to this directory. Use relative paths (e.g. \"docs/notes.md\", \".\") — do not guess absolute paths."
 	if sandboxEnabled && containerDir != "" {
-
-		displayDir = containerDir
-		guidance = "This is the single sandbox workspace root for file tools and exec. Use relative paths so all tools resolve consistently."
+		guidance = "This is the sandbox workspace root for file tools and exec. Relative paths resolve from this directory. Absolute paths under your workspace also work inside the sandbox."
 	}
 
 	return []string{
@@ -734,17 +729,5 @@ func displayTeamWorkspacePath(teamWorkspace, workspace string, sandboxEnabled bo
 	if teamWorkspace == "" {
 		return ""
 	}
-	if !sandboxEnabled || containerDir == "" {
-		return teamWorkspace
-	}
-	if workspace != "" {
-		if mapped, err := tools.SandboxHostPathToContainer(teamWorkspace, workspace, containerDir); err == nil {
-			return mapped
-		}
-	}
-	teamID := filepath.Base(filepath.Clean(teamWorkspace))
-	if teamID == "" || teamID == "." || teamID == string(filepath.Separator) {
-		return filepath.Join(containerDir, "team-workspace")
-	}
-	return filepath.Join(containerDir, "teams", teamID)
+	return teamWorkspace
 }

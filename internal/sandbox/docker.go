@@ -90,17 +90,32 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 	}
 
 	// Workspace mount — resolve host path for DooD (Docker-out-of-Docker) setups.
-	containerWorkdir := cfg.ContainerWorkdir()
+	var containerWorkdir string
 	if workspace != "" && cfg.WorkspaceAccess != AccessNone {
 		mountOpt := "rw"
 		if cfg.WorkspaceAccess == AccessRO {
 			mountOpt = "ro"
 		}
 		hostPath := resolveHostWorkspacePath(ctx, workspace)
-		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, containerWorkdir, mountOpt))
+		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, hostPath, mountOpt))
+		containerWorkdir = hostPath
+	}
+	for _, m := range cfg.ExtraMounts {
+		if m.HostPath == "" || m.ContainerPath == "" {
+			continue
+		}
+		mountOpt := "rw"
+		if m.Access == AccessRO {
+			mountOpt = "ro"
+		}
+		hostPath := resolveHostWorkspacePath(ctx, expandHome(m.HostPath))
+		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, m.ContainerPath, mountOpt))
 	}
 	args = append(args, dockerReadOnlyPathMountArgs(cfg, workspace)...)
-	args = append(args, "-w", containerWorkdir)
+	if containerWorkdir != "" {
+		args = append(args, "-w", containerWorkdir)
+		args = append(args, "-e", "HOME="+containerWorkdir)
+	}
 
 	// Environment variables
 	for k, v := range cfg.Env {
@@ -252,15 +267,38 @@ func NewDockerManager(cfg Config) *DockerManager {
 	return m
 }
 
+// SetDefaultConfig updates the base config (used when Get receives a nil override).
+func (m *DockerManager) SetDefaultConfig(cfg Config) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.config = cfg
+	m.mu.Unlock()
+}
+
 func dockerResolvedWorkspaceBind(ctx context.Context, cfg Config, workspace string) string {
 	if cfg.WorkspaceAccess == AccessNone || strings.TrimSpace(workspace) == "" {
 		return ""
 	}
-	return resolveHostWorkspacePath(ctx, workspace)
+	return resolveHostWorkspacePath(ctx, expandHome(workspace))
+}
+
+func dockerBindKey(ctx context.Context, cfg Config, workspace string) string {
+	parts := []string{dockerResolvedWorkspaceBind(ctx, cfg, workspace)}
+	for _, m := range cfg.ExtraMounts {
+		if m.HostPath == "" || m.ContainerPath == "" {
+			continue
+		}
+		hostPath := resolveHostWorkspacePath(ctx, expandHome(m.HostPath))
+		parts = append(parts, fmt.Sprintf("%s:%s:%s", hostPath, m.ContainerPath, m.Access))
+	}
+	parts = append(parts, readOnlyHostPathsKey(cfg.ReadOnlyHostPaths, dockerResolvedWorkspaceBind(ctx, cfg, workspace), extraMountHostPaths(cfg.ExtraMounts)...))
+	return strings.Join(parts, "|")
 }
 
 func dockerReadOnlyPathMountArgs(cfg Config, workspace string) []string {
-	paths := normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, workspace)
+	paths := normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, workspace, extraMountHostPaths(cfg.ExtraMounts)...)
 	if len(paths) == 0 {
 		return nil
 	}
@@ -278,20 +316,17 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	if cfgOverride != nil {
 		cfg = *cfgOverride
 	}
-	if cfg.Mode == ModeOff {
+	if cfg.ModeIsOff() {
 		return nil, ErrSandboxDisabled
 	}
 
-	resolved := dockerResolvedWorkspaceBind(ctx, cfg, workspace)
-	readOnlyKey := readOnlyHostPathsKey(cfg.ReadOnlyHostPaths, resolved)
+	bindKey := dockerBindKey(ctx, cfg, workspace)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if sb, ok := m.sandboxes[key]; ok {
-		oldResolved := dockerResolvedWorkspaceBind(ctx, sb.config, sb.workspace)
-		oldReadOnlyKey := readOnlyHostPathsKey(sb.config.ReadOnlyHostPaths, oldResolved)
-		if oldResolved == resolved && oldReadOnlyKey == readOnlyKey {
+		if dockerBindKey(ctx, sb.config, sb.workspace) == bindKey {
 			return sb, nil
 		}
 		delete(m.sandboxes, key)

@@ -815,7 +815,12 @@
       "timeout": "Hết giờ (giây)",
       "memoryMb": "Bộ nhớ (MB)",
       "cpus": "CPU",
-      "networkEnabled": "Bật mạng"
+      "networkEnabled": "Bật mạng",
+      "readOnlyHostPaths": "Đường dẫn Host chỉ đọc",
+      "readOnlyHostPathsTip": "Các thư mục từ máy chủ để phản chiếu vào hộp cát ở chế độ chỉ đọc. Mỗi đường dẫn một dòng. Hữu ích cho ~/.aws hoặc ~/.kube.",
+      "extraMounts": "Mount bổ sung",
+      "extraMountsTip": "Các liên kết mount tùy chỉnh bổ sung để đưa các thư mục máy chủ vào trong hộp cát.",
+      "noExtraMounts": "Không có mount bổ sung nào được định cấu hình."
     },
     "memory": {
       "title": "Bộ nhớ",

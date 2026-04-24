@@ -12,8 +12,8 @@ import { InfoLabel } from "@/components/shared/info-label";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
 import type { ConfigRuntimeSnapshot } from "../hooks/use-config";
 import { SubSection, Field } from "./ai-defaults-form-controls";
+import { SandboxMountsEditor } from "./sandbox-mounts-editor";
 
- 
 type AgentsData = Record<string, any>;
 
 const DEFAULT: AgentsData = { defaults: {} };
@@ -293,18 +293,17 @@ export function AiDefaultsSection({ data, runtime, onSave, saving }: Props) {
               disabled={bwrapResourceUiLocked}
             />
             <Field label={t("agents.sandbox.timeoutSec")} tip={t("agents.sandbox.timeoutSecTip")} type="number" value={sandbox.timeout_sec} onChange={(v) => updateNested("sandbox", { timeout_sec: Number(v) })} placeholder="300" />
-            <div className={"flex items-center justify-between gap-2" + (bwrapResourceUiLocked ? " opacity-60" : "")}>
-              {bwrapResourceUiLocked ? (
-                <InfoLabel tip={fieldDisabledTip}>{t("agents.sandbox.networkEnabled")}</InfoLabel>
-              ) : (
-                <Label>{t("agents.sandbox.networkEnabled")}</Label>
-              )}
+            <div className="flex items-center justify-between gap-2">
+              <Label>{t("agents.sandbox.networkEnabled")}</Label>
               <Switch
                 checked={sandbox.network_enabled ?? false}
                 onCheckedChange={(v) => updateNested("sandbox", { network_enabled: v })}
-                disabled={bwrapResourceUiLocked}
               />
             </div>
+            <SandboxMountsEditor
+              value={sandbox}
+              onChange={(patch) => updateNested("sandbox", patch)}
+            />
           </div>
         </SubSection>
 

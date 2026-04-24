@@ -55,9 +55,16 @@ func setupToolRegistry(
 	toolsReg = tools.NewRegistry()
 	agentCfg = cfg.ResolveAgent("default")
 
-	// Sandbox manager (optional — Docker and/or bubblewrap; Router picks backend per effective config)
-	if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil && sbCfg.Mode != "" && sbCfg.Mode != "off" {
-		resolved := sbCfg.ToSandboxConfig()
+	// Sandbox manager (always create if backends available, so sandboxed tools can be registered)
+	// This allows enabling sandbox at runtime via agent-specific configs.
+	{
+		var resolved sandbox.Config
+		if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil {
+			resolved = sbCfg.ToSandboxConfig()
+		} else {
+			resolved = sandbox.DefaultConfig()
+		}
+
 		bg := context.Background()
 		var dm *sandbox.DockerManager
 		if err := sandbox.CheckDockerAvailable(bg); err != nil {
@@ -71,34 +78,15 @@ func setupToolRegistry(
 		} else {
 			bm = sandbox.NewBwrapManager(resolved)
 		}
-		primaryOK := false
-		switch resolved.Backend {
-		case sandbox.BackendBwrap:
-			primaryOK = bm != nil
-		default:
-			primaryOK = dm != nil
-		}
-		if !primaryOK {
-			slog.Warn("sandbox disabled: primary backend unavailable",
-				"configured_mode", sbCfg.Mode,
-				"backend", string(resolved.Backend),
-				"docker_ok", dm != nil,
-				"bwrap_ok", bm != nil,
-			)
-		} else {
+
+		if dm != nil || bm != nil {
 			sandboxMgr = sandbox.NewSandboxRouter(resolved, dm, bm)
-			infoArgs := []any{
-				"default_backend", string(resolved.Backend),
+			slog.Info("sandbox manager initialized",
 				"docker", dm != nil,
 				"bwrap", bm != nil,
-				"mode", string(resolved.Mode),
-				"scope", string(resolved.Scope),
-				"image", resolved.Image,
-			}
-			if bm != nil {
-				infoArgs = append(infoArgs, "bwrap_resource_limits", bm.CgroupLimitsActive())
-			}
-			slog.Info("sandbox enabled", infoArgs...)
+				"default_mode", string(resolved.Mode),
+				"default_backend", string(resolved.Backend),
+			)
 		}
 	}
 

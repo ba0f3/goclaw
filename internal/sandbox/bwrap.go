@@ -64,7 +64,9 @@ func probeSystemdRunScope(ctx context.Context) bool {
 	}
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(runCtx, systemdRunBin, "--scope", "/usr/bin/true").CombinedOutput()
+	scopeArgs := systemdScopeArgsForEUID(os.Geteuid())
+	scopeArgs = append(scopeArgs, "/usr/bin/true")
+	out, err := exec.CommandContext(runCtx, systemdRunBin, scopeArgs...).CombinedOutput()
 	if err != nil {
 		slog.Debug("sandbox.bwrap.systemd_scope_unavailable",
 			"hint", "memory_mb/cpus/pids_limit will not be enforced; bubblewrap isolation still works",
@@ -73,6 +75,33 @@ func probeSystemdRunScope(ctx context.Context) bool {
 		return false
 	}
 	return true
+}
+
+func systemdScopeArgsForEUID(euid int) []string {
+	if euid != 0 {
+		return []string{"--user", "--scope"}
+	}
+	return []string{"--scope"}
+}
+
+// hostEnvForSystemdUserRun returns KEY=value entries needed so systemd-run --user can
+// reach the session/user bus. The probe uses the process inherit env; Exec replaces env
+// with minimalBwrapEnv, so we must pass these through when wrapping with systemd-run.
+// See: "Failed to connect to user scope bus" when DBUS_SESSION_BUS_ADDRESS / XDG_RUNTIME_DIR are unset.
+var systemdUserRunHostEnvKeys = []string{
+	"DBUS_SESSION_BUS_ADDRESS",
+	"XDG_RUNTIME_DIR",
+	"XDG_SESSION_ID",
+}
+
+func hostEnvPairsForSystemdUserRun() []string {
+	var out []string
+	for _, k := range systemdUserRunHostEnvKeys {
+		if v, ok := os.LookupEnv(k); ok && v != "" {
+			out = append(out, k+"="+v)
+		}
+	}
+	return out
 }
 
 // BwrapSandbox runs each Exec in a fresh bubblewrap namespace (stateless).
@@ -109,7 +138,7 @@ func (s *BwrapSandbox) Exec(ctx context.Context, command []string, workDir strin
 	useSystemdWrap := wantLimits && s.cgroupViaSystemd
 	var cmd *exec.Cmd
 	if useSystemdWrap {
-		sysArgs := []string{"--scope"}
+		sysArgs := systemdScopeArgsForEUID(os.Geteuid())
 		if s.config.MemoryMB > 0 {
 			sysArgs = append(sysArgs, "-p", fmt.Sprintf("MemoryMax=%dM", s.config.MemoryMB))
 		}
@@ -130,7 +159,16 @@ func (s *BwrapSandbox) Exec(ctx context.Context, command []string, workDir strin
 		cmd = exec.CommandContext(execCtx, bwrapBin, bwrapArgs...)
 	}
 
-	cmd.Env = mergeSandboxEnv(minimalBwrapEnv(s.config.ContainerWorkdir()), o.Env)
+	homeDir := s.resolvedWorkspace
+	if homeDir == "" {
+		homeDir = s.config.ContainerWorkdir()
+	}
+	baseEnv := minimalBwrapEnv(homeDir)
+	if useSystemdWrap {
+		// systemd-run --user needs session bus env; probe inherits it, but we replace env below.
+		baseEnv = append(slices.Clone(baseEnv), hostEnvPairsForSystemdUserRun()...)
+	}
+	cmd.Env = mergeSandboxEnv(baseEnv, o.Env)
 	if len(o.Stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(o.Stdin)
 	}
@@ -207,18 +245,30 @@ func buildBwrapArgs(cfg Config, resolvedHostWS string) []string {
 	}
 	args = append(args, "--die-with-parent")
 
-	cw := cfg.ContainerWorkdir()
 	switch cfg.WorkspaceAccess {
 	case AccessRW:
 		if resolvedHostWS != "" {
-			args = append(args, "--bind", resolvedHostWS, cw)
+			args = append(args, "--bind", resolvedHostWS, resolvedHostWS)
 		}
 	case AccessRO:
 		if resolvedHostWS != "" {
-			args = append(args, "--ro-bind", resolvedHostWS, cw)
+			args = append(args, "--ro-bind", resolvedHostWS, resolvedHostWS)
 		}
 	}
-	for _, p := range normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolvedHostWS) {
+	for _, m := range cfg.ExtraMounts {
+		if m.HostPath == "" || m.ContainerPath == "" {
+			continue
+		}
+		hostPath := expandHome(m.HostPath)
+		switch m.Access {
+		case AccessRO:
+			args = append(args, "--ro-bind", hostPath, m.ContainerPath)
+		default:
+			args = append(args, "--bind", hostPath, m.ContainerPath)
+		}
+	}
+	extraRoots := extraMountHostPaths(cfg.ExtraMounts)
+	for _, p := range normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolvedHostWS, extraRoots...) {
 		args = append(args, "--ro-bind", p, p)
 	}
 	return args
@@ -229,7 +279,7 @@ func bwrapEffectiveChdir(cfg Config, resolvedHostWS, workDir string) string {
 		return workDir
 	}
 	if cfg.WorkspaceAccess != AccessNone && resolvedHostWS != "" {
-		return cfg.ContainerWorkdir()
+		return resolvedHostWS
 	}
 	return "/tmp"
 }
@@ -275,6 +325,38 @@ func NewBwrapManager(cfg Config) *BwrapManager {
 	}
 }
 
+// SetDefaultConfig updates the base config (used when Get receives a nil override).
+func (m *BwrapManager) SetDefaultConfig(cfg Config) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.config = cfg
+	m.mu.Unlock()
+}
+
+func extraMountHostPaths(mounts []ExtraMount) []string {
+	out := make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		if m.HostPath != "" {
+			out = append(out, m.HostPath)
+		}
+	}
+	return out
+}
+
+func bwrapBindKey(cfg Config, resolvedWorkspace string) string {
+	parts := []string{resolvedWorkspace}
+	for _, m := range cfg.ExtraMounts {
+		if m.HostPath == "" || m.ContainerPath == "" {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s:%s:%s", m.HostPath, m.ContainerPath, m.Access))
+	}
+	parts = append(parts, readOnlyHostPathsKey(cfg.ReadOnlyHostPaths, resolvedWorkspace, extraMountHostPaths(cfg.ExtraMounts)...))
+	return strings.Join(parts, "|")
+}
+
 // CgroupLimitsActive reports whether memory/CPU/pids limits are applied via systemd-run.
 func (m *BwrapManager) CgroupLimitsActive() bool {
 	if m == nil {
@@ -289,7 +371,7 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 	if cfgOverride != nil {
 		cfg = *cfgOverride
 	}
-	if cfg.Mode == ModeOff {
+	if cfg.ModeIsOff() {
 		return nil, ErrSandboxDisabled
 	}
 
@@ -297,13 +379,12 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 	if cfg.WorkspaceAccess != AccessNone && strings.TrimSpace(workspace) != "" {
 		resolved = resolveHostWorkspacePath(ctx, workspace)
 	}
-	readOnlyKey := readOnlyHostPathsKey(cfg.ReadOnlyHostPaths, resolved)
+	bindKey := bwrapBindKey(cfg, resolved)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if sb, ok := m.sandboxes[key]; ok {
-		oldReadOnlyKey := readOnlyHostPathsKey(sb.config.ReadOnlyHostPaths, sb.resolvedWorkspace)
-		if sb.resolvedWorkspace == resolved && oldReadOnlyKey == readOnlyKey {
+		if bwrapBindKey(sb.config, sb.resolvedWorkspace) == bindKey {
 			return sb, nil
 		}
 		delete(m.sandboxes, key)
@@ -316,7 +397,7 @@ func (m *BwrapManager) Get(ctx context.Context, key string, workspace string, cf
 		cgroupViaSystemd:  m.cgroupViaSystemd,
 	}
 	m.sandboxes[key] = sb
-	slog.Debug("bwrap sandbox slot created", "key", key, "workspace_bind", resolved != "", "read_only_host_paths", len(normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolved)))
+	slog.Debug("bwrap sandbox slot created", "key", key, "workspace_bind", resolved != "", "extra_mounts", len(cfg.ExtraMounts), "read_only_host_paths", len(normalizeReadOnlyHostPaths(cfg.ReadOnlyHostPaths, resolved, extraMountHostPaths(cfg.ExtraMounts)...)))
 	return sb, nil
 }
 

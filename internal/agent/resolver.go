@@ -58,6 +58,11 @@ type ResolverDeps struct {
 	// Global defaults (from config.json) — per-agent DB overrides take priority
 	CompactionCfg          *config.CompactionConfig
 	ContextPruningCfg      *config.ContextPruningConfig
+	// LiveConfig is the in-memory gateway *config.Config; it is updated in place
+	// on config.patch/apply. Use it to read current agents.defaults.sandbox (e.g. mode)
+	// without a process restart. If nil, globalDefaultSandboxConfig() falls back to
+	// DefaultSandboxConfig.
+	LiveConfig *config.Config
 	SandboxEnabled         bool
 	SandboxContainerDir    string
 	SandboxWorkspaceAccess string
@@ -137,6 +142,24 @@ type ResolverDeps struct {
 
 	// Vault hook: called when a text file is uploaded by user (nil = no vault registration)
 	OnTextUploaded func(ctx context.Context, path, content string)
+}
+
+// globalDefaultSandboxConfig returns a fresh snapshot of agents.defaults.sandbox.
+// When LiveConfig is set, it reflects the current in-memory config (after config.patch/apply)
+// so global mode/backend changes apply without restarting the process.
+func (deps ResolverDeps) globalDefaultSandboxConfig() *sandbox.Config {
+	if deps.LiveConfig != nil {
+		if sb := deps.LiveConfig.Agents.Defaults.Sandbox; sb != nil {
+			resolved := sb.ToSandboxConfig()
+			return &resolved
+		}
+		return nil
+	}
+	if deps.DefaultSandboxConfig != nil {
+		c := *deps.DefaultSandboxConfig
+		return &c
+	}
+	return nil
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
@@ -252,13 +275,13 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		if c := ag.ParseContextPruning(); c != nil {
 			contextPruningCfg = c
 		}
-		sandboxEnabled := deps.SandboxEnabled
+		mgrAvailable := deps.SandboxEnabled
 		sandboxContainerDir := deps.SandboxContainerDir
 		sandboxWorkspaceAccess := deps.SandboxWorkspaceAccess
 		sandboxBackend := deps.SandboxBackend
 		var sandboxCfgOverride *sandbox.Config
-		if deps.DefaultSandboxConfig != nil {
-			copy := *deps.DefaultSandboxConfig
+		if g := deps.globalDefaultSandboxConfig(); g != nil {
+			copy := *g
 			sandboxCfgOverride = &copy
 			sandboxContainerDir = copy.ContainerWorkdir()
 			sandboxWorkspaceAccess = string(copy.WorkspaceAccess)
@@ -266,6 +289,15 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		}
 		if c := ag.ParseSandboxConfig(); c != nil {
 			resolved := c.ToSandboxConfig()
+			// ToSandboxConfig() maps empty backend to Docker. Restore global default if omitted.
+			if g := deps.globalDefaultSandboxConfig(); g != nil {
+				if strings.TrimSpace(c.Backend) == "" {
+					resolved.Backend = g.Backend
+				}
+				if strings.TrimSpace(c.WorkspaceAccess) == "" {
+					resolved.WorkspaceAccess = g.WorkspaceAccess
+				}
+			}
 			sandboxContainerDir = resolved.ContainerWorkdir()
 			sandboxWorkspaceAccess = string(resolved.WorkspaceAccess)
 			sandboxBackend = string(resolved.Backend)
@@ -301,16 +333,22 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 				slog.Warn("failed to create agent workspace directory", "workspace", workspace, "agent", agentKey, "error", err)
 			}
 		}
-		if sandboxCfgOverride == nil && sandboxEnabled {
+		if sandboxCfgOverride == nil && mgrAvailable {
 			defaultCfg := sandbox.DefaultConfig()
-			defaultCfg.Mode = sandbox.ModeAll
+			// DefaultConfig() has Mode: ModeOff. We keep it as ModeOff unless
+			// explicitly enabled by global defaults or agent config.
 			defaultCfg.Workdir = sandboxContainerDir
 			defaultCfg.WorkspaceAccess = sandbox.Access(sandboxWorkspaceAccess)
 			defaultCfg.Backend = sandbox.BackendType(sandboxBackend)
 			sandboxCfgOverride = &defaultCfg
 		}
 		if sandboxCfgOverride != nil {
-			sandboxCfgOverride.ReadOnlyHostPaths = buildSandboxReadOnlyHostPaths(deps.DataDir, ag.TenantID, tenantSlug, workspace)
+			sandboxCfgOverride.ReadOnlyHostPaths = buildSandboxReadOnlyHostPaths(sandboxCfgOverride.ReadOnlyHostPaths, deps.DataDir, ag.TenantID, tenantSlug, workspace)
+		}
+
+		loopSandboxEnabled := false
+		if mgrAvailable && sandboxCfgOverride != nil {
+			loopSandboxEnabled = sandboxCfgOverride.ShouldSandbox(ag.AgentKey)
 		}
 
 		toolsReg := deps.Tools
@@ -526,7 +564,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MaxMessageChars:        deps.MaxMessageChars,
 			CompactionCfg:          compactionCfg,
 			ContextPruningCfg:      contextPruningCfg,
-			SandboxEnabled:         sandboxEnabled,
+			SandboxEnabled:         loopSandboxEnabled,
 			SandboxContainerDir:    sandboxContainerDir,
 			SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 			SandboxBackend:         sandboxBackend,
@@ -633,8 +671,10 @@ func derefInt(p *int) int {
 	return *p
 }
 
-func buildSandboxReadOnlyHostPaths(dataDir string, tenantID uuid.UUID, tenantSlug, workspaceRoot string) []string {
-	candidates := make([]string, 0, 4)
+func buildSandboxReadOnlyHostPaths(basePaths []string, dataDir string, tenantID uuid.UUID, tenantSlug, workspaceRoot string) []string {
+	candidates := make([]string, 0, len(basePaths)+4)
+	candidates = append(candidates, basePaths...)
+
 	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
 		candidates = append(candidates,
 			filepath.Join(homeDir, ".goclaw", "skills"),
@@ -650,7 +690,7 @@ func buildSandboxReadOnlyHostPaths(dataDir string, tenantID uuid.UUID, tenantSlu
 	root := filepath.Clean(workspaceRoot)
 	seen := make(map[string]struct{}, len(candidates))
 	for _, raw := range candidates {
-		p := filepath.Clean(raw)
+		p := filepath.Clean(config.ExpandHome(raw))
 		if p == "" || p == "." {
 			continue
 		}

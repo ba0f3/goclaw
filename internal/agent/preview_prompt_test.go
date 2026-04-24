@@ -41,11 +41,8 @@ func TestBuildPreviewPrompt_UsesGlobalSandboxDefaults(t *testing.T) {
 		SandboxEnabled:      true,
 		SandboxContainerDir: "/workspace",
 	})
-	if !strings.Contains(r.Prompt, "Your working directory is: /workspace") {
-		t.Fatalf("expected sandbox container workdir in preview prompt")
-	}
-	if strings.Contains(r.Prompt, "Your working directory is: /home/tui/.goclaw/workspace/sysops") {
-		t.Fatalf("expected workspace section to show sandbox workdir")
+	if !strings.Contains(r.Prompt, "Your working directory is: /home/tui/.goclaw/workspace/sysops") {
+		t.Fatalf("expected workspace section to show host path in preview prompt")
 	}
 }
 

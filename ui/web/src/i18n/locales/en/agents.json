@@ -830,7 +830,12 @@
       "timeout": "Timeout (sec)",
       "memoryMb": "Memory (MB)",
       "cpus": "CPUs",
-      "networkEnabled": "Network Enabled"
+      "networkEnabled": "Network Enabled",
+      "readOnlyHostPaths": "Read-Only Host Paths",
+      "readOnlyHostPathsTip": "Directories from the host to mirror into the sandbox as read-only. One path per line. Useful for ~/.aws or ~/.kube.",
+      "extraMounts": "Extra Mounts",
+      "extraMountsTip": "Additional custom bind mounts to expose host directories inside the sandbox.",
+      "noExtraMounts": "No extra mounts configured."
     },
     "memory": {
       "title": "Memory",

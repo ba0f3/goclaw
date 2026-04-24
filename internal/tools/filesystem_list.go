@@ -162,9 +162,17 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 
 func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {
 	mount := SandboxHostMountRoot(ctx, t.workspace)
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigFromCtx(ctx))
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigWithTeamWorkspace(ctx, SandboxConfigFromCtx(ctx)))
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb, sandbox.DefaultContainerWorkdir), nil
+	containerCwd, err := SandboxCwd(ctx, mount, sandbox.DefaultContainerWorkdir)
+	if err != nil {
+		return nil, err
+	}
+	bridge := sandbox.NewFsBridge(sb, containerCwd)
+	if teamWs := ToolTeamWorkspaceFromCtx(ctx); teamWs != "" {
+		bridge.WithExtraDirs(teamWs)
+	}
+	return bridge, nil
 }

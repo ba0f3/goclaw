@@ -19,13 +19,31 @@ func NewSandboxRouter(base Config, docker *DockerManager, bwrap *BwrapManager) M
 	return &SandboxRouter{base: base, docker: docker, bwrap: bwrap}
 }
 
+// ApplyDefaultSandboxConfig updates defaults used when a request has no per-tool
+// cfgOverride (and refreshes Docker/bwrap manager defaults). Call after config.patch/apply.
+func (r *SandboxRouter) ApplyDefaultSandboxConfig(cfg Config) {
+	if r == nil {
+		return
+	}
+	r.base = cfg
+	if r.docker != nil {
+		r.docker.SetDefaultConfig(cfg)
+	}
+	if r.bwrap != nil {
+		r.bwrap.SetDefaultConfig(cfg)
+	}
+}
+
 // Get implements Manager.
 func (r *SandboxRouter) Get(ctx context.Context, key, workspace string, cfgOverride *Config) (Sandbox, error) {
 	cfg := r.base
 	if cfgOverride != nil {
 		cfg = *cfgOverride
 	}
-	if cfg.Mode == ModeOff {
+	if cfg.ModeIsOff() {
+		return nil, ErrSandboxDisabled
+	}
+	if aid := ScopeKeyAgentID(key); aid != "" && !cfg.ShouldSandbox(aid) {
 		return nil, ErrSandboxDisabled
 	}
 	switch cfg.Backend {
