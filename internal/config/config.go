@@ -246,6 +246,8 @@ type SandboxConfig struct {
 	ReadOnlyRoot    *bool             `json:"read_only_root,omitempty"`   // read-only root fs (default true)
 	SetupCommand    string            `json:"setup_command,omitempty"`    // run once after container creation
 	Env             map[string]string `json:"env,omitempty"`              // extra environment variables
+	ReadOnlyHostPaths []string             `json:"read_only_host_paths,omitempty"`
+	ExtraMounts       []sandbox.ExtraMount `json:"extra_mounts,omitempty"`
 
 	// Enhanced security
 	User           string `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
@@ -319,6 +321,12 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 	}
 	if len(sc.Env) > 0 {
 		cfg.Env = sc.Env
+	}
+	if len(sc.ReadOnlyHostPaths) > 0 {
+		cfg.ReadOnlyHostPaths = sc.ReadOnlyHostPaths
+	}
+	if len(sc.ExtraMounts) > 0 {
+		cfg.ExtraMounts = sc.ExtraMounts
 	}
 
 	// Enhanced security

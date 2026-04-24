@@ -22,7 +22,7 @@ func TestBuildSandboxReadOnlyHostPaths_IncludesExistingSources(t *testing.T) {
 	mustMkdirAll(t, filepath.Join(dataDir, "tenants", tenantSlug, "skills-store"))
 	t.Setenv("HOME", homeDir)
 
-	got := buildSandboxReadOnlyHostPaths(dataDir, tenantID, tenantSlug, filepath.Join(tmp, "workspace"))
+	got := buildSandboxReadOnlyHostPaths(nil, dataDir, tenantID, tenantSlug, filepath.Join(tmp, "workspace"))
 	want := []string{
 		filepath.Join(dataDir, "skills-store"),
 		filepath.Join(dataDir, "tenants", tenantSlug, "skills-store"),
@@ -44,7 +44,7 @@ func TestBuildSandboxReadOnlyHostPaths_SkipsWorkspaceNestedPaths(t *testing.T) {
 	mustMkdirAll(t, filepath.Join(dataDir, "skills-store"))
 	t.Setenv("HOME", homeDir)
 
-	got := buildSandboxReadOnlyHostPaths(dataDir, uuid.New(), "slug", workspaceRoot)
+	got := buildSandboxReadOnlyHostPaths(nil, dataDir, uuid.New(), "slug", workspaceRoot)
 	if len(got) != 0 {
 		t.Fatalf("expected no read-only host paths under workspace root, got %#v", got)
 	}

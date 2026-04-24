@@ -413,8 +413,11 @@ func ExpandHome(path string) string {
 		return path
 	}
 	home, _ := os.UserHomeDir()
-	if len(path) > 1 && path[1] == '/' {
-		return home + path[1:]
+	if len(path) > 1 {
+		if path[1] == '/' {
+			return home + path[1:]
+		}
+		return filepath.Join(home, path[1:])
 	}
 	return home
 }

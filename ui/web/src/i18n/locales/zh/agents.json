@@ -815,7 +815,12 @@
       "timeout": "超时（秒）",
       "memoryMb": "内存（MB）",
       "cpus": "CPU",
-      "networkEnabled": "启用网络"
+      "networkEnabled": "启用网络",
+      "readOnlyHostPaths": "只读主机路径",
+      "readOnlyHostPathsTip": "从主机镜像到沙箱的只读目录。每行一个路径。适用于 ~/.aws 或 ~/.kube。",
+      "extraMounts": "额外挂载",
+      "extraMountsTip": "在沙箱内部暴露主机目录的额外自定义挂载。",
+      "noExtraMounts": "未配置额外挂载。"
     },
     "memory": {
       "title": "记忆",

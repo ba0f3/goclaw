@@ -84,6 +84,40 @@ func (d *gatewayDeps) runLifecycle(
 		deps.webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains, updatedCfg.Tools.WebFetch.BlockedDomains)
 	})
 
+	// Reload global sandbox defaults (mode/backend) so tools + router match config.patch without restart.
+	if deps.sandboxMgr != nil {
+		d.msgBus.Subscribe("sandbox-default-config-reload", func(evt bus.Event) {
+			if evt.Name != bus.TopicConfigChanged {
+				return
+			}
+			updatedCfg, ok := evt.Payload.(*config.Config)
+			if !ok {
+				return
+			}
+			var base sandbox.Config
+			if updatedCfg.Agents.Defaults.Sandbox != nil {
+				base = updatedCfg.Agents.Defaults.Sandbox.ToSandboxConfig()
+			} else {
+				base = sandbox.DefaultConfig()
+			}
+			if rt, ok := deps.sandboxMgr.(*sandbox.SandboxRouter); ok {
+				rt.ApplyDefaultSandboxConfig(base)
+				slog.Info("sandbox default config reloaded", "mode", string(base.Mode), "backend", string(base.Backend))
+			}
+		})
+	}
+
+	// Cached agent Loops store a snapshot of resolved sandbox (and other defaults).
+	// After config.patch/apply, force re-resolve so global agents.defaults and LiveConfig are picked up.
+	d.msgBus.Subscribe("agent-router-invalidate-on-config", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		if d.agentRouter != nil {
+			d.agentRouter.InvalidateAll()
+		}
+	})
+
 	// Reload TTS providers on config changes via pub/sub.
 	d.msgBus.Subscribe("tts-config-reload", func(evt bus.Event) {
 		if evt.Name != bus.TopicConfigChanged {

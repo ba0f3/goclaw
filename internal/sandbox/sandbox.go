@@ -19,6 +19,8 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,6 +41,14 @@ const (
 	AccessRO   Access = "ro"   // read-only
 	AccessRW   Access = "rw"   // read-write
 )
+
+// ExtraMount defines an additional host→container bind mount.
+// ContainerPath is the absolute path inside the sandbox (mirrors host path).
+type ExtraMount struct {
+	HostPath      string `json:"host_path"`
+	ContainerPath string `json:"container_path"`
+	Access        Access `json:"access"`
+}
 
 // Scope determines container reuse granularity.
 type Scope string
@@ -82,8 +92,12 @@ type Config struct {
 	MaxOutputBytes    int      `json:"max_output_bytes,omitempty"` // limit exec stdout+stderr capture (default 1MB, 0 = unlimited)
 	SetupCommand      string   `json:"setup_command,omitempty"`
 	ContainerPrefix   string   `json:"container_prefix,omitempty"`
-	Workdir           string   `json:"workdir,omitempty"`              // container workdir (default "/workspace")
+	Workdir           string `json:"workdir,omitempty"`              // container workdir (default "/workspace")
 	ReadOnlyHostPaths []string `json:"read_only_host_paths,omitempty"` // extra host dirs mirrored read-only into sandbox at same absolute paths
+
+	// Additional bind mounts (e.g. team workspace) beyond the primary workspace.
+	// All paths use host absolute paths as container paths.
+	ExtraMounts []ExtraMount `json:"extra_mounts,omitempty"`
 
 	// Pruning (matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
@@ -127,6 +141,23 @@ func (c Config) ShouldSandbox(agentID string) bool {
 	default:
 		return false
 	}
+}
+
+// ModeIsOff returns true when sandboxing is disabled for this config.
+// Empty Mode (zero value) is treated as off so partial overrides never
+// accidentally enable a sandbox.
+func (c Config) ModeIsOff() bool {
+	return c.Mode == ModeOff || c.Mode == ""
+}
+
+// ScopeKeyAgentID returns the goclaw agent id from a sandbox scope key
+// (e.g. "agent:my-agent:telegram:direct:123" → "my-agent"). Empty if unknown.
+func ScopeKeyAgentID(key string) string {
+	parts := strings.SplitN(key, ":", 3)
+	if len(parts) < 2 || parts[0] != "agent" {
+		return ""
+	}
+	return parts[1]
 }
 
 // DefaultContainerWorkdir is the default container-side working directory
@@ -235,3 +266,18 @@ type Manager interface {
 
 // ErrSandboxDisabled is returned when sandbox mode is "off".
 var ErrSandboxDisabled = fmt.Errorf("sandbox is disabled")
+
+// expandHome replaces leading ~ with the user home directory.
+func expandHome(path string) string {
+	if path == "" || path[0] != '~' {
+		return path
+	}
+	home, _ := os.UserHomeDir()
+	if len(path) > 1 {
+		if path[1] == '/' {
+			return home + path[1:]
+		}
+		return filepath.Join(home, path[1:])
+	}
+	return home
+}

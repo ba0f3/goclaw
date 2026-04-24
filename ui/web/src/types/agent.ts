@@ -48,6 +48,12 @@ export interface ContextPruningConfig {
   };
 }
 
+export interface ExtraMount {
+  host_path: string;
+  container_path: string;
+  access: "none" | "ro" | "rw";
+}
+
 export interface SandboxConfig {
   backend?: "docker" | "bwrap";
   mode?: "off" | "non-main" | "all";
@@ -58,6 +64,8 @@ export interface SandboxConfig {
   cpus?: number;
   timeout_sec?: number;
   network_enabled?: boolean;
+  read_only_host_paths?: string[];
+  extra_mounts?: ExtraMount[];
 }
 
 export interface MemoryConfig {

@@ -67,32 +67,32 @@ func TestSandboxHostPathToContainer(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			name:          "empty host path is container base",
+			name:          "empty host path falls back to mount root",
 			hostPath:      "",
 			hostMountRoot: "/app/ws",
 			containerBase: "/workspace",
-			want:          "/workspace",
+			want:          "/app/ws",
 		},
 		{
-			name:          "mount root",
+			name:          "mount root returns host path directly",
 			hostPath:      "/app/ws",
 			hostMountRoot: "/app/ws",
 			containerBase: "/workspace",
-			want:          "/workspace",
+			want:          "/app/ws",
 		},
 		{
-			name:          "nested cwd",
+			name:          "nested cwd returns host path directly",
 			hostPath:      "/app/ws/agent/u1/sub",
 			hostMountRoot: "/app/ws",
 			containerBase: "/workspace",
-			want:          "/workspace/agent/u1/sub",
+			want:          "/app/ws/agent/u1/sub",
 		},
 		{
-			name:          "outside mount",
+			name:          "outside mount returns host path directly",
 			hostPath:      "/other/x",
 			hostMountRoot: "/app/ws",
 			containerBase: "/workspace",
-			wantErr:       true,
+			want:          "/other/x",
 		},
 	}
 	for _, tt := range tests {
@@ -117,46 +117,46 @@ func TestSandboxHostPathToContainer(t *testing.T) {
 func TestSandboxCwd(t *testing.T) {
 	tests := []struct {
 		name            string
-		ctxWorkspace    string // empty = no workspace in context
-		globalWorkspace string // host mount root passed to SandboxCwd (must match Manager.Get)
+		ctxWorkspace    string
+		globalWorkspace string
 		containerBase   string
 		want            string
 		wantErr         bool
 	}{
 		{
-			name:            "no workspace in context — fallback to container base",
+			name:            "no workspace in context — fallback to mount root",
 			ctxWorkspace:    "",
 			globalWorkspace: "/app/workspace",
 			containerBase:   "/workspace",
-			want:            "/workspace",
+			want:            "/app/workspace",
 		},
 		{
 			name:            "workspace equals global mount",
 			ctxWorkspace:    "/app/workspace",
 			globalWorkspace: "/app/workspace",
 			containerBase:   "/workspace",
-			want:            "/workspace",
+			want:            "/app/workspace",
 		},
 		{
-			name:            "session leaf mount cwd is container root",
+			name:            "session leaf mount cwd is host path",
 			ctxWorkspace:    "/app/workspace/fox-spirit/telegram/52007861",
 			globalWorkspace: "/app/workspace/fox-spirit/telegram/52007861",
 			containerBase:   "/workspace",
-			want:            "/workspace",
+			want:            "/app/workspace/fox-spirit/telegram/52007861",
 		},
 		{
 			name:            "team session leaf mount",
 			ctxWorkspace:    "/app/workspace/teams/uuid/-1003819627125",
 			globalWorkspace: "/app/workspace/teams/uuid/-1003819627125",
 			containerBase:   "/workspace",
-			want:            "/workspace",
+			want:            "/app/workspace/teams/uuid/-1003819627125",
 		},
 		{
 			name:            "shared workspace mount equals agent base",
 			ctxWorkspace:    "/app/workspace/fox-spirit",
 			globalWorkspace: "/app/workspace/fox-spirit",
 			containerBase:   "/workspace",
-			want:            "/workspace",
+			want:            "/app/workspace/fox-spirit",
 		},
 		{
 			name:            "workspace outside host mount — error",
@@ -170,21 +170,21 @@ func TestSandboxCwd(t *testing.T) {
 			ctxWorkspace:    "/home/u/workspace/fox/telegram/1",
 			globalWorkspace: "/home/u/workspace/fox/telegram/1",
 			containerBase:   "/workspace",
-			want:            "/workspace",
+			want:            "/home/u/workspace/fox/telegram/1",
 		},
 		{
 			name:            "disjoint tree: nested under context-as-mount",
 			ctxWorkspace:    "/home/u/workspace/fox/telegram/1",
 			globalWorkspace: "/home/u/workspace/fox",
 			containerBase:   "/workspace",
-			want:            "/workspace/telegram/1",
+			want:            "/home/u/workspace/fox/telegram/1",
 		},
 		{
 			name:            "custom container base session mount",
 			ctxWorkspace:    "/app/workspace/agent-a/sub",
 			globalWorkspace: "/app/workspace/agent-a/sub",
 			containerBase:   "/home/sandbox",
-			want:            "/home/sandbox",
+			want:            "/app/workspace/agent-a/sub",
 		},
 	}
 

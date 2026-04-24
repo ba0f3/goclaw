@@ -462,7 +462,7 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 	cwd string, sandboxKey string, envMap map[string]string, timeout time.Duration) *Result {
 
 	mount := SandboxHostMountRoot(ctx, t.workspace)
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigFromCtx(ctx))
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigWithTeamWorkspace(ctx, SandboxConfigFromCtx(ctx)))
 	if err != nil {
 		slog.Warn("security.credentialed_exec_sandbox_unavailable",
 			"binary", absPath, "error", err)

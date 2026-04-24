@@ -14,8 +14,9 @@ import (
 
 // FsBridge provides sandboxed file operations inside a Sandbox (Docker or bwrap).
 type FsBridge struct {
-	sb      Sandbox
-	workdir string // container-side working directory (e.g. "/workspace")
+	sb        Sandbox
+	workdir   string   // container-side working directory (e.g. host absolute path)
+	extraDirs []string // additional allowed container-side roots (e.g. team workspace)
 }
 
 // NewFsBridge creates a bridge that runs file ops through sb.Exec.
@@ -27,6 +28,12 @@ func NewFsBridge(sb Sandbox, workdir string) *FsBridge {
 		sb:      sb,
 		workdir: workdir,
 	}
+}
+
+// WithExtraDirs sets additional allowed directories for absolute path resolution.
+func (b *FsBridge) WithExtraDirs(dirs ...string) *FsBridge {
+	b.extraDirs = dirs
+	return b
 }
 
 // ReadFile reads file contents from inside the sandbox.
@@ -99,15 +106,25 @@ func (b *FsBridge) Stat(ctx context.Context, path string) (string, error) {
 	return res.Stdout, nil
 }
 
-// resolvePath resolves a path relative to the container workdir.
-// Validates that absolute paths stay within the workdir (defense in depth).
+func (b *FsBridge) isAllowedRoot(cleaned string) bool {
+	if cleaned == b.workdir || strings.HasPrefix(cleaned, b.workdir+"/") {
+		return true
+	}
+	for _, d := range b.extraDirs {
+		if cleaned == d || strings.HasPrefix(cleaned, d+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func (b *FsBridge) resolvePath(path string) string {
 	if path == "" || path == "." {
 		return b.workdir
 	}
 	if strings.HasPrefix(path, "/") {
 		cleaned := filepath.Clean(path)
-		if cleaned == b.workdir || strings.HasPrefix(cleaned, b.workdir+"/") {
+		if b.isAllowedRoot(cleaned) {
 			return cleaned
 		}
 		return b.workdir

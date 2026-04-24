@@ -208,7 +208,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr string, replaceAll bool, sandboxKey string) *Result {
 	mount := SandboxHostMountRoot(ctx, t.workspace)
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigFromCtx(ctx))
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mount, SandboxConfigWithTeamWorkspace(ctx, SandboxConfigFromCtx(ctx)))
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
@@ -219,7 +219,10 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 	}
 	containerPath := ResolveSandboxPath(path, containerCwd)
 
-	bridge := sandbox.NewFsBridge(sb, sandbox.DefaultContainerWorkdir)
+	bridge := sandbox.NewFsBridge(sb, containerCwd)
+	if teamWs := ToolTeamWorkspaceFromCtx(ctx); teamWs != "" {
+		bridge.WithExtraDirs(teamWs)
+	}
 	content, err := bridge.ReadFile(ctx, containerPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read file: %v", err) + MaybeFsBridgeHint(err))

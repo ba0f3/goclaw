@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { SandboxConfig } from "@/types/agent";
+import { SandboxMountsEditor } from "../../../config/sections/sandbox-mounts-editor";
 import { ConfigSection, InfoLabel, numOrUndef } from "./config-section";
 
 interface SandboxSectionProps {
@@ -139,6 +140,10 @@ export function SandboxSection({ enabled, value, onToggle, onChange }: SandboxSe
         />
         <InfoLabel tip="Allow the sandbox container to access the network. Disable for fully isolated execution.">{t(`${s}.networkEnabled`)}</InfoLabel>
       </div>
+      <SandboxMountsEditor
+        value={value}
+        onChange={(patch) => onChange({ ...value, ...patch })}
+      />
     </ConfigSection>
   );
 }

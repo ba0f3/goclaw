@@ -9,14 +9,14 @@ import (
 
 // normalizeReadOnlyHostPaths validates and canonicalizes extra host paths that
 // should be mirrored read-only into the sandbox at the same absolute path.
-func normalizeReadOnlyHostPaths(paths []string, workspaceRoot string) []string {
+func normalizeReadOnlyHostPaths(paths []string, workspaceRoot string, extraRoots ...string) []string {
 	if len(paths) == 0 {
 		return nil
 	}
 	root := filepath.Clean(workspaceRoot)
 	seen := make(map[string]struct{}, len(paths))
 	for _, raw := range paths {
-		p := filepath.Clean(strings.TrimSpace(raw))
+		p := filepath.Clean(expandHome(strings.TrimSpace(raw)))
 		if p == "" || p == "." || !filepath.IsAbs(p) {
 			continue
 		}
@@ -26,6 +26,16 @@ func normalizeReadOnlyHostPaths(paths []string, workspaceRoot string) []string {
 		}
 		if root != "" && isSameOrNestedPath(p, root) {
 			// Already visible via primary workspace bind.
+			continue
+		}
+		var underExtra bool
+		for _, extra := range extraRoots {
+			if extra != "" && isSameOrNestedPath(p, extra) {
+				underExtra = true
+				break
+			}
+		}
+		if underExtra {
 			continue
 		}
 		seen[p] = struct{}{}
@@ -41,8 +51,8 @@ func normalizeReadOnlyHostPaths(paths []string, workspaceRoot string) []string {
 	return out
 }
 
-func readOnlyHostPathsKey(paths []string, workspaceRoot string) string {
-	return strings.Join(normalizeReadOnlyHostPaths(paths, workspaceRoot), "\x00")
+func readOnlyHostPathsKey(paths []string, workspaceRoot string, extraRoots ...string) string {
+	return strings.Join(normalizeReadOnlyHostPaths(paths, workspaceRoot, extraRoots...), "\x00")
 }
 
 func isSameOrNestedPath(path, root string) bool {

@@ -5,16 +5,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 )
 
-// SandboxHostMountRoot returns the host path to bind at the sandbox container workdir
-// (e.g. /workspace). registryWorkspace is the tool registry root (ExecTool.workspace),
-// used only when ToolWorkspaceFromCtx is empty.
-//
-// When ToolWorkspaceFromCtx is set (effective session workspace from injectContext:
-// DM/group/team paths, or shared agent base when workspace sharing applies), that path
-// is mounted so the sandbox sees only that session — not sibling agents or channels.
-// Inside the container, containerBase (e.g. /workspace) is the root of that directory.
+// SandboxHostMountRoot returns the host path to bind into the sandbox container.
+// With host-path mounting, the container sees the workspace at the same absolute
+// path as the host, so this returns the resolved host workspace path.
 func SandboxHostMountRoot(ctx context.Context, registryWorkspace string) string {
 	ws := ToolWorkspaceFromCtx(ctx)
 	if ws == "" {
@@ -23,47 +20,29 @@ func SandboxHostMountRoot(ctx context.Context, registryWorkspace string) string 
 	return filepath.Clean(ws)
 }
 
-// SandboxCwd maps the current effective workspace (from context) to its
-// corresponding path inside the sandbox container. hostMountRoot must match the path
-// passed to sandbox.Manager.Get(..., workspace, ...) for this request (use SandboxHostMountRoot).
-//
-// When hostMountRoot equals the context workspace (typical), this returns containerBase
-// (e.g. /workspace). If hostMountRoot is a strict ancestor of the context workspace,
-// the result is containerBase plus the relative suffix.
+// SandboxCwd returns the effective working directory path inside the sandbox.
+// With host-path mounting, the container path equals the host path.
 func SandboxCwd(ctx context.Context, hostMountRoot, containerBase string) (string, error) {
 	ws := ToolWorkspaceFromCtx(ctx)
 	if ws == "" {
-		// No per-request workspace — fall back to container root.
-		return containerBase, nil
+		return hostMountRoot, nil
 	}
-
-	rel, err := filepath.Rel(hostMountRoot, ws)
-	if err != nil || strings.HasPrefix(filepath.Clean(rel), "..") {
-		return "", fmt.Errorf("workspace %q is outside sandbox mount %q", ws, hostMountRoot)
+	ws = filepath.Clean(ws)
+	root := filepath.Clean(hostMountRoot)
+	if ws == root || strings.HasPrefix(ws, root+string(filepath.Separator)) {
+		return ws, nil
 	}
-
-	if rel == "." {
-		return containerBase, nil
-	}
-	return filepath.Join(containerBase, rel), nil
+	return "", fmt.Errorf("workspace %q is outside sandbox mount %q", ws, hostMountRoot)
 }
 
-// SandboxHostPathToContainer maps a host working directory under hostMountRoot to the path
-// inside the sandbox (same mount root as Manager.Get). Use for exec cmd.Dir / docker -w.
+// SandboxHostPathToContainer maps a host path to its container-side path.
+// With host-path mounting, all mounted paths appear at the same absolute path
+// inside the container, so this returns the host path directly.
 func SandboxHostPathToContainer(hostPath, hostMountRoot, containerBase string) (string, error) {
 	if hostPath == "" {
-		return containerBase, nil
+		return hostMountRoot, nil
 	}
-	hostPath = filepath.Clean(hostPath)
-	root := filepath.Clean(hostMountRoot)
-	rel, err := filepath.Rel(root, hostPath)
-	if err != nil || strings.HasPrefix(filepath.Clean(rel), "..") {
-		return "", fmt.Errorf("path %q is outside sandbox mount %q", hostPath, hostMountRoot)
-	}
-	if rel == "." {
-		return containerBase, nil
-	}
-	return filepath.Join(containerBase, rel), nil
+	return filepath.Clean(hostPath), nil
 }
 
 // ResolveSandboxPath resolves a tool-provided path (relative or absolute)
@@ -75,4 +54,31 @@ func ResolveSandboxPath(path, containerCwd string) string {
 		return path
 	}
 	return filepath.Join(containerCwd, path)
+}
+
+// SandboxConfigWithTeamWorkspace returns a sandbox config override that
+// includes the team workspace as an extra mount at its host absolute path.
+// If baseCfg is nil, returns nil so the sandbox Manager uses its default
+// (r.base / m.config). A zero Config has Mode "" which is not ModeOff and
+// would incorrectly enable sandboxing.
+func SandboxConfigWithTeamWorkspace(ctx context.Context, baseCfg *sandbox.Config) *sandbox.Config {
+	teamWs := ToolTeamWorkspaceFromCtx(ctx)
+	if teamWs == "" {
+		return baseCfg
+	}
+	if baseCfg == nil {
+		return nil
+	}
+	cfg := *baseCfg
+	// Avoid duplicate mount if team workspace is already the primary workspace.
+	mount := SandboxHostMountRoot(ctx, "")
+	if mount != "" && filepath.Clean(mount) == filepath.Clean(teamWs) {
+		return &cfg
+	}
+	cfg.ExtraMounts = append(cfg.ExtraMounts, sandbox.ExtraMount{
+		HostPath:      teamWs,
+		ContainerPath: teamWs,
+		Access:        sandbox.AccessRW,
+	})
+	return &cfg
 }
