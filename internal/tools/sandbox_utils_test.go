@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 )
 
 func TestSandboxHostMountRoot(t *testing.T) {
@@ -254,3 +256,56 @@ func TestResolveSandboxPath(t *testing.T) {
 		})
 	}
 }
+
+func TestSandboxRoutingKey(t *testing.T) {
+	mgr := &sandboxRouterStub{}
+
+	t.Run("disabled when mode off", func(t *testing.T) {
+		ctx := context.Background()
+		ctx = WithToolSandboxKey(ctx, "agent:worker:telegram:direct:1")
+		cfg := sandbox.DefaultConfig()
+		cfg.Mode = sandbox.ModeOff
+		ctx = WithSandboxConfig(ctx, &cfg)
+
+		gotKey, ok := SandboxRoutingKey(ctx, mgr)
+		if ok || gotKey != "" {
+			t.Fatalf("SandboxRoutingKey() = (%q, %v), want (\"\", false)", gotKey, ok)
+		}
+	})
+
+	t.Run("disabled when agent excluded by mode", func(t *testing.T) {
+		ctx := context.Background()
+		ctx = WithToolSandboxKey(ctx, "agent:main:telegram:direct:1")
+		cfg := sandbox.DefaultConfig()
+		cfg.Mode = sandbox.ModeNonMain
+		ctx = WithSandboxConfig(ctx, &cfg)
+
+		gotKey, ok := SandboxRoutingKey(ctx, mgr)
+		if ok || gotKey != "" {
+			t.Fatalf("SandboxRoutingKey() = (%q, %v), want (\"\", false)", gotKey, ok)
+		}
+	})
+
+	t.Run("enabled when mode allows agent", func(t *testing.T) {
+		ctx := context.Background()
+		ctx = WithToolSandboxKey(ctx, "agent:worker:telegram:direct:1")
+		cfg := sandbox.DefaultConfig()
+		cfg.Mode = sandbox.ModeNonMain
+		ctx = WithSandboxConfig(ctx, &cfg)
+
+		gotKey, ok := SandboxRoutingKey(ctx, mgr)
+		if !ok || gotKey != "agent:worker:telegram:direct:1" {
+			t.Fatalf("SandboxRoutingKey() = (%q, %v), want (%q, true)", gotKey, ok, "agent:worker:telegram:direct:1")
+		}
+	})
+}
+
+type sandboxRouterStub struct{}
+
+func (s *sandboxRouterStub) Get(context.Context, string, string, *sandbox.Config) (sandbox.Sandbox, error) {
+	return nil, nil
+}
+func (s *sandboxRouterStub) Release(context.Context, string) error { return nil }
+func (s *sandboxRouterStub) ReleaseAll(context.Context) error      { return nil }
+func (s *sandboxRouterStub) Stop()                                 {}
+func (s *sandboxRouterStub) Stats() map[string]any                 { return map[string]any{} }
