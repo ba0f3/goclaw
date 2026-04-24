@@ -85,8 +85,8 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 	}
 
 	// Sandbox routing (sandboxKey from ctx — thread-safe)
-	sandboxKey := ToolSandboxKeyFromCtx(ctx)
-	if t.sandboxMgr != nil && sandboxKey != "" {
+	sandboxKey, sandboxEnabled := SandboxRoutingKey(ctx, t.sandboxMgr)
+	if sandboxEnabled {
 		return t.executeInSandbox(ctx, path, sandboxKey)
 	}
 

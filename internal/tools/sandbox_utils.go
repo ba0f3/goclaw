@@ -56,6 +56,32 @@ func ResolveSandboxPath(path, containerCwd string) string {
 	return filepath.Join(containerCwd, path)
 }
 
+// SandboxRoutingKey returns the sandbox key for this tool call when sandboxing
+// is enabled for the current request. It returns ("", false) when execution
+// should stay on host (no manager, no key, mode off, or agent excluded).
+func SandboxRoutingKey(ctx context.Context, mgr sandbox.Manager) (string, bool) {
+	if mgr == nil {
+		return "", false
+	}
+	sandboxKey := ToolSandboxKeyFromCtx(ctx)
+	if sandboxKey == "" {
+		return "", false
+	}
+	cfg := SandboxConfigFromCtx(ctx)
+	if cfg == nil {
+		// No per-request override: preserve existing behavior and let manager
+		// decide based on its default config.
+		return sandboxKey, true
+	}
+	if cfg.ModeIsOff() {
+		return "", false
+	}
+	if aid := sandbox.ScopeKeyAgentID(sandboxKey); aid != "" && !cfg.ShouldSandbox(aid) {
+		return "", false
+	}
+	return sandboxKey, true
+}
+
 // SandboxConfigWithTeamWorkspace returns a sandbox config override that
 // includes the team workspace as an extra mount at its host absolute path.
 // If baseCfg is nil, returns nil so the sandbox Manager uses its default
